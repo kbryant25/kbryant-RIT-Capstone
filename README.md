@@ -3,7 +3,7 @@ This is a repository for my senior capstone project N-Body Codes.
 
 This code is based on the N-Body integrator code Rebound https://github.com/hannorein/rebound
 
-You are free to use and modify this code however you like under the GNU General Public License v3.0. All I ask is that you credit myself as well as the creators of Rebound
+You are free to use and modify this code however you like under the GNU General Public License v3.0. All I ask is that you credit myself as well as the creators of Rebound (And maybe send me any cool things you make I would love to see what other people do with this but it's up to you)
 
 ## Part 1: AGN-Body Code
 This code is used to simulate the broad line region surrounding the SMBH and what happens when the central mass recieves a kick velocity. 
