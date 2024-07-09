@@ -12,7 +12,7 @@ from matplotlib import colormaps
 
 
 # Set Parameters --------------------------------------------------------------
-
+# Preset to parameters for the galaxy M87
 BHM = 6.5*(10**9)    # Black hole mass
 KV = 100        # Kick velocity in 2piAU/year = 29.7858905 km / s
 dt = 0.05         # Timestep
