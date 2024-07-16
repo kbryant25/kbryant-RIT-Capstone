@@ -8,18 +8,24 @@ Created on Tue Jul  9 11:01:10 2024
 import rebound
 import numpy as np
 import matplotlib.pyplot as plt
-from matplotlib import colormaps
 
 
 # Set Parameters --------------------------------------------------------------
-# Preset to parameters for the galaxy M87
+
 BHM = 6.5*(10**9)    # Black hole mass
-KV = 100        # Kick velocity in 2piAU/year = 29.7858905 km / s
-dt = 0.05         # Timestep
+KVZ = 100        # Kick velocity in 2piAU/year = 29.7858905 km / s
+KVX = 0
+KVY = 0
 RS = None        # Set seed for repeatability
 Nimg = 200     # Number of frames (Note: when decreasing number make sure to delete images from animation file)
-KVkms = KV * 29.7858905
-print('Recoil velocity in km/s: ' + str(KVkms))
+KVZkms = KVZ * 29.7858905
+KVXkms = KVX * 29.7858905
+KVYkms = KVY * 29.7858905
+
+print('Recoil z velocity in km/s: ' + str(KVZkms))
+print('Recoil x velocity in km/s: ' + str(KVXkms))
+print('Recoil y velocity in km/s: ' + str(KVYkms))
+
 
 plt.ioff() #Tells spyder to only save the plots and not display them
 
@@ -37,7 +43,7 @@ np.random.seed(RS)            # Random seed for test cases
 # Set up the test particles ---------------------------------------------------
 
 N_testparticle = 1500         #Number of test particles
-a_initial = np.linspace(130, 200, N_testparticle)
+a_initial = np.linspace(4, 8, N_testparticle)
 for a in a_initial:
     sim.add(a=a,f=np.random.rand()*2.*np.pi) # Mass is set to 0 by default, random true anomaly
 
@@ -51,6 +57,7 @@ such as time, integrator choice.
 Only needs to be done once """
 
 
+
 # Integration -----------------------------------------------------------------
 
 for i in range(Nimg):
@@ -58,13 +65,13 @@ for i in range(Nimg):
         # Print the base simulation before any modification
         coords = np.zeros((sim.N, 6))
         sim.serialize_particle_data(xyzvxvyvz=coords)
-        fig, ([ax1, ax2], [ax3, ax4]) = plt.subplots(2,2, figsize = (7,5.5), dpi = 200)
+        fig, ([ax1, ax2], [ax3, ax4]) = plt.subplots(2,2, figsize = (9,8), dpi = 200)
 
         ax1 = plt.subplot(2,2,3)
         ax1.set_facecolor('grey')
         vz = coords[:,5]
         plt.scatter(coords[:,0], coords[:,1], alpha = 0.25, s = 5)
-        scatterxy = plt.scatter(coords[:,0], coords[:,1], c = vz, cmap = 'coolwarm', s = 5)
+        scatterxy = plt.scatter(coords[:,0], coords[:,1], c = vz, cmap = 'coolwarm_r', s = 5)
         plt.colorbar(scatterxy)
         plt.scatter(0,0, marker = '*', color = 'm', s = 75)
         ax1.set_title("XY")
@@ -91,23 +98,24 @@ for i in range(Nimg):
         plt.scatter(0,0, alpha = 0)
         plt.axis('off')
         plt.tick_params(left = False, right = False , labelleft = False , labelbottom = False, bottom = False)
-        ax4.set_title("SMBH Recoil [Distance in AU]", fontsize = 10)
+        ax4.set_title("SMBH Recoil [Distance in AU]\nInitial Z velocity (km/s): " + str(KVZkms)+"\nInitial X velocity (km/s): "+ str(KVXkms)+"\nInitial Y velocity (km/s): "+ str(KVYkms), fontsize = 13)
         sim.step()
     else:
         #Add velocity kick
         sim.move_to_hel()            # Move to the heliocentric reference frame
-        sim.particles[0].vz = KV     # Changing the z velocity of the central particle to __ (in code units)
+        sim.particles[0].vz = KVZ     # Changing the z velocity of the central particle to __ (in code units)
+        sim.particles[0].vx = KVX
+        sim.particles[0].vy = KVY        
         sim.move_to_hel()            # Move into the new central particle-frame
-        sim.dt = dt
         sim.step()
         coords = np.zeros((sim.N, 6))
         sim.serialize_particle_data(xyzvxvyvz=coords)
-        fig, ([ax1, ax2], [ax3, ax4]) = plt.subplots(2,2, figsize = (7,5.5), dpi = 200)
+        fig, ([ax1, ax2], [ax3, ax4]) = plt.subplots(2,2, figsize = (9,8), dpi = 200)
 
         ax1 = plt.subplot(2,2,3)
         vz = coords[:,5]
         plt.scatter(coords[:,0], coords[:,1], alpha = 0.25, s = 5)
-        scatterxy = plt.scatter(coords[:,0], coords[:,1], c = vz, cmap = 'coolwarm', s = 5)
+        scatterxy = plt.scatter(coords[:,0], coords[:,1], c = vz, cmap = 'coolwarm_r', s = 5)
         plt.colorbar(scatterxy)
         plt.scatter(0,0, marker = '*', color = 'm', s = 75)
         ax1.set_title("XY")
@@ -134,7 +142,7 @@ for i in range(Nimg):
         plt.scatter(0,0, alpha = 0)
         plt.axis('off')
         plt.tick_params(left = False, right = False , labelleft = False , labelbottom = False, bottom = False)
-        ax4.set_title("SMBH Recoil [Distance in AU]", fontsize = 10)
+        ax4.set_title("SMBH Recoil [Distance in AU]\nInitial Z velocity (km/s): " + str(KVZkms)+"\nInitial X velocity (km/s): "+ str(KVXkms)+"\nInitial Y velocity (km/s): "+ str(KVYkms), fontsize = 13)
     # If you don't care about creating gifs and only want to create the simulation comment out the next line
     plt.savefig("path/image_%s.jpg" % i)
     sim.save_to_file("path/archive.bin")
@@ -144,9 +152,7 @@ for i in range(Nimg):
 
 # Print parameters for easy copy-pasting
 
-# print('BH Mass: ' + str(BHM ))
-# print('Number of test Particles: ' + str(N_testparticle))
-# print('Kick velocity: '+ str(KV))
-# print('Timestep: ' + str(dt))
-# print('Random seed: ' + str(RS))
-# print('Number of frames to generate: ' + str(Nimg))
+print('BH Mass: ' + str(BHM ))
+print('Number of test Particles: ' + str(N_testparticle))
+print('Random seed: ' + str(RS))
+print('Number of frames to generate: ' + str(Nimg))
