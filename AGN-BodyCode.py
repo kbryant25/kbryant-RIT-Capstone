@@ -124,8 +124,8 @@ for i in range(Nimg):
         plt.axis('off')
         plt.tick_params(left = False, right = False , labelleft = False , labelbottom = False, bottom = False)
         ax4.set_title("SMBH Recoil [Distance in AU]\nInitial Z velocity (km/s): " + str(KVZkms)+"\nInitial X velocity (km/s): "+ str(KVXkms)+"\nInitial Y velocity (km/s): "+ str(KVYkms), fontsize = 13)
-    plt.savefig("C:/Users/karin/Desktop/Spyder/Capstone/REBOUND/AnimationFolder/image_%s.jpg" % i)
-    sim.save_to_file("C:/Users/karin/Desktop/Spyder/Capstone/REBOUND/archive.bin")
+    plt.savefig("path/image_%s.jpg" % i)
+    sim.save_to_file("path/archive.bin")
     #Saving each plot to a file with it's own name to be created into a gif https://ezgif.com/maker
     plt.close()
 
