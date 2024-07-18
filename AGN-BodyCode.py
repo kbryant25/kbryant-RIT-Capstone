@@ -9,13 +9,11 @@ import rebound
 import numpy as np
 import matplotlib.pyplot as plt
 
-
-
 # Set Parameters --------------------------------------------------------------
 
 BHM = 6.5*(10**9)    # Black hole mass
-KVZ = 100        # Kick velocity in 2piAU/year = 29.7858905 km / s
-KVX = 0
+KVZ = 50        # Kick velocity in 2piAU/year = 29.7858905 km / s
+KVX = 100
 KVY = 0
 RS = None        # Set seed for repeatability
 Nimg = 200     # Number of frames (Note: when decreasing number make sure to delete images from animation file)
@@ -44,18 +42,9 @@ np.random.seed(RS)            # Random seed for test cases
 # Set up the test particles ---------------------------------------------------
 
 N_testparticle = 1500         #Number of test particles
-a_initial = np.linspace(4, 8, N_testparticle)
+a_initial = np.linspace(100, 130, N_testparticle)    # Inner and outer radius
 for a in a_initial:
     sim.add(a=a,f=np.random.rand()*2.*np.pi) # Mass is set to 0 by default, random true anomaly
-
-
-# Save sim to binary file------------------------------------------------------
-
-# sim.save_to_file('AGNBaseCode.bin')
-""" Use to save to binary file, includes ALL information about the particles
-(mass, position, velocity, etc), as well as the current simulation settings
-such as time, integrator choice.
-Only needs to be done once """
 
 
 # Integration -----------------------------------------------------------------
