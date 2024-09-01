@@ -6,10 +6,21 @@ This code is based on the N-Body integrator code Rebound https://github.com/hann
 You are free to use and modify this code however you like under the GNU General Public License v3.0. All I ask is that you credit myself as well as the creators of Rebound (And maybe send me any cool things you make I would love to see what other people do with this but it's up to you)
 
 ## Part 1: AGN-Body Code
-This code is used to simulate the broad line region surrounding the SMBH and what happens when the central mass recieves a kick velocity with secondary codes to show velocity mapping and bound orbits around the central mass
+This code will be used to simulate the broad line region surrounding the SMBH and what happens when the central mass recieves a kick velocity. Secondary codes  can also be created in order to show velocity mapping and bound orbits around the central mass.
+
+- Strip AGN down into central mass surrounded by massless test particles
+- Apply kick velocity to central mass
+- Customizable parameters (SMBH mass, velocity, angle, range)
 
 ## Part 2: Data Extraction and Analysis
-WIP
+Extract position and velocity vectors for each particle from the N-Body code and compile into a database. From there construct a code that is able to compute the line profiles from the database. From there spectroscopic analysis can be done on the emission lines created by the simulation.
+
+- Extract position and velocity data from Rebound binary file
+- Separate 6 variables by timestep
+- Connect to BELPRO
 
 ## Part 3: Identify Trends in Profile Properties
-WIP
+Explore the parameter space: e.g., black hole mass, kick velocity, inclination, initial cloud distribution and velocity field etc. And identify trends in the profile properties (width, shift, asymmetry, kurtosis) that we are measuring from quasar spectra. The end goal is to compare these model parameters with measurements obtained from SDSS (Sloan Digital Sky Survey) spectra done by Emily Temple for her master’s thesis.
+
+- Create database of output spectra from BELPRO
+- Compare with SDSS spectra
