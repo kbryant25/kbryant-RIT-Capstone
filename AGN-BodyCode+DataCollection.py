@@ -176,7 +176,7 @@ os.remove('path/THE.csv')
 #%%
 # Initialize Simulationarchive simulation--------------------------------------
 
-sa = rebound.Simulationarchive("C:/Users/karin/Desktop/Spyder/Capstone/REBOUND/archive.bin")
+sa = rebound.Simulationarchive("path/archive.bin")
 N_archives = len(sa)
 
 
