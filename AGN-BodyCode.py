@@ -42,9 +42,12 @@ np.random.seed(RS)            # Random seed for test cases
 # Set up the test particles ---------------------------------------------------
 
 N_testparticle = 1500         #Number of test particles
-a_initial = np.linspace(100, 130, N_testparticle)    # Inner and outer radius
+a_initial = np.linspace(3.3, 8, N_testparticle) # Initial range of semi major axis to distribute particles
 for a in a_initial:
-    sim.add(a=a,f=np.random.rand()*2.*np.pi) # Mass is set to 0 by default, random true anomaly
+    sim.add(a=a,
+            inc = np.random.uniform(low = -0.1, high = 0.1), # Inclination
+            Omega = np.random.uniform(high = np.pi),         # Longitude of ascending node
+            f=np.random.rand()*2.*np.pi) # Mass is set to 0 by default, random true anomaly
 
 
 # Integration -----------------------------------------------------------------
