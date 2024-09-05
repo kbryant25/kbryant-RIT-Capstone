@@ -1,8 +1,9 @@
 # -*- coding: utf-8 -*-
 """
-Created on Tue Sep 3 12:05:46 2024
+Created on Wed Sep 4 11:18:44 2024
 
 @author: Karina Bryant
+
 """
 
 import rebound
@@ -43,9 +44,12 @@ np.random.seed(RS)            # Random seed for test cases
 
 a_initial = np.linspace(3.3, 8, N_testparticle) # Initial range of semi major axis to distribute particles
 for a in a_initial:
-    sim.add(a=a,f=np.random.rand()*2.*np.pi)    # Mass is set to 0 by default, random true anomaly
-
-
+    sim.add(a=a,
+            inc = np.random.uniform(low = -0.1, high = 0.1), # Inclination
+            Omega = np.random.uniform(high = np.pi),         # Longitude of ascending node
+            f=np.random.rand()*2.*np.pi) # Mass is set to 0 by default, random true anomaly
+    
+        
 # Print parameters for easy copy-pasting---------------------------------------
 
 print('Recoil z velocity in km/s: ' + str(KVZkms))
@@ -170,7 +174,6 @@ os.remove('path/simZdata.csv')
 os.remove('path/simVXdata.csv')
 os.remove('path/simVYdata.csv')
 os.remove('path/simVZdata.csv')
-os.remove('path/THE.csv')
 
 
 #%%
@@ -236,12 +239,18 @@ vy = pd.read_csv('path/simVYdata.csv')
 vz = pd.read_csv('path/simVZdata.csv')
 
 
-#%%
+# Adjust z values so they all have the same 0 value----------------------------
+for i in range(1, sim.N):
+    b = x + y
+    zAdjust = b * np.tan(sim.particles[i].inc)
+    zFix = zAdjust + z
+
+
 # Split CSVs into individual timestep CSVs-------------------------------------
 
 var_list = ['X', 'Y', 'Z', 'Vx', 'Vy', 'Vz'] # Column titles
 t_step = np.arange(Nimg)                     # Number of files it needs to make - Matches with # of images
-df_list = [x, y, z, vx, vy, vz]              # List of dataframes
+df_list = [x, y, zFix, vx, vy, vz]              # List of dataframes
 t_dict = {}
 for i, t in enumerate(t_step):               # Loop through each column in each parameter csv
     temp_df = pd.DataFrame()
@@ -275,8 +284,6 @@ df = pd.concat(pieces, axis = 1)
 df = df.rename(columns ={0:'Parameter'})
 df.to_csv('path/THE.csv', header = True )
 
-new_df = df.dropna(inplace = True) # Skips any particles that leave sim scope
-
 """***************************************************************************
 IMPORTANT
 PLEASE DON'T OPEN THIS CSV FILE ONCE IT GETS TOO BIG, OPENING IT *WILL* CRASH 
@@ -284,7 +291,28 @@ YOUR COMPUTER
 Source: Just trust me...
 """
 
+new_df = df.dropna(inplace = True) # Skips any particles that leave sim scope
+
+# Telling the computer how to read our timestep hypercube----------------------
+
+Nimg1 = Nimg + 1 # This is so the computer knows to choose the correct range of indices
+
+# Establish ranges that will scale automatically for N chosen initially--------
+
+xrange = [i for i in range(1, Nimg1)]
+yrange = [i for i in range(Nimg1 + 1, 2 * Nimg1)]
+zrange = [i for i in range((2 * Nimg1) + 1, 3 * Nimg1)]
+vxrange = [i for i in range((3 * Nimg1) + 1, 4 * Nimg1)]
+vyrange = [i for i in range((4 * Nimg1) + 1, 5 * Nimg1)]
+vzrange = [i for i in range((5 * Nimg1) + 1, 6 * Nimg)]
 
 
+# Save to dataframe with parameter and timestep as column title----------------
 
+xPos = pd.read_csv('path/THE.csv', usecols=xrange)
+yPos = pd.read_csv('path/THE.csv', usecols=yrange)
+zPos = pd.read_csv('path/THE.csv', usecols=zrange)
+xVel = pd.read_csv('path/THE.csv', usecols=vxrange)
+yVel = pd.read_csv('path/THE.csv', usecols=vyrange)
+zVel = pd.read_csv('path/THE.csv', usecols=vzrange)
 
