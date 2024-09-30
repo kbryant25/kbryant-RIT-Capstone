@@ -17,6 +17,8 @@ Extract position and velocity vectors for each particle from the N-Body code and
 
 - Extract position and velocity data from Rebound binary file
 - Separate 6 variables by timestep
+- Calculate cloud luminosities
+- Create individual spectra for each timestep
 - Connect to BELPRO
 
 ## Part 3: Identify Trends in Profile Properties
