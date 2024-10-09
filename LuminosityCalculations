@@ -1,0 +1,412 @@
+# -*- coding: utf-8 -*-
+"""
+Created on Wed Jul 3 11:21:09 2024
+
+@author: Karina Bryant
+"""
+
+import rebound
+import numpy as np
+import matplotlib.pyplot as plt
+import os
+import pandas as pd
+
+
+
+# User Set Parameters --------------------------------------------------------------
+'''Code units are in cgs'''
+
+
+BHM = 6.5e8                    # Black hole mass in solar masses
+KVZ = 25                      # Kick velocity in 2piAU/year = 2978589.05 cm / s
+KVX = 0
+KVY = 0
+RS = None                      # Set seed for repeatability
+N_testparticle = 5000          # Number of test particles
+Nimg = 50                      # Number of frames 
+LAGN = 10**45                  # ergs/s  use for dust sublimation radius
+Y = 20                         # Size scaled to BLR
+Qh = 2.6*10**55                # Ionizing photon luminosity photons*s^-1
+Tsub = 1500                    # Dust sublimation temperature
+Cf = 1                         # Covering fraction
+Ntot = 1500                    # Number of clouds
+ObsInc = 1                     # Inclination to observer
+LAGN = 10**45                  # Bolometric luminosity erg s**-1  Sum of all clouds should be around 10**40
+ObsInc = 90                    # Inclination to observer 0-90 degrees
+Eratio = 1                     # Eddington ratio
+sigma = 1                      # Angular width
+p = 1                          # Cloud distribution power law
+c =  2.998e10                  # cm/s
+
+
+# Calculated parameters--------------------------------------------------------
+KVZcms = KVZ * 2978589.05
+KVXcms = KVX * 2978589.05
+KVYcms = KVY * 2978589.05
+BHMg = BHM * 1.989e+33              # Solar mass to g
+SwR = ((2*BHMg*(6.67e-8))/(c**2))   # Schwarzschild Radius (cm)
+Rd = (0.4*((((LAGN)/(10**45))**0.5)*((1500/Tsub)**2.6)))* 3.086e+18 # Dust sublimation radius
+
+
+# Constants--------------------------------------------------------------------
+alphaeff = 1.1*10**-13              # Effective recombination coefficient for Halpha cm^3*s^-1
+alphaB = 2.6*10**-13                # Recombination coefficient for hydrogen cm^3*s^-1
+Qh = 2.6*10**55                     # Ionizing photon luminosity photons*s^-1
+h = 6.62607015*10**-27 
+EffRecomb = 1.1 * 10**13            # cm^3 s^−1
+nu = (c)/(656*10**-6)
+
+
+plt.ioff() #Tells IDE to only save the plots and not display them for speed
+
+# Simulation ------------------------------------------------------------------
+
+"""Set up the particles in the simulation. Particles are added by default in
+Jacobi coordinates (center-of-mass frame)"""
+
+sim = rebound.Simulation()    # Initialize the simulation
+sim.units = ('cm', 's', 'g')  # Set simulation units
+sim.add(m = BHM)              # Add the central particle
+np.random.seed(RS)            # Random seed for test cases
+
+
+# Set up the test particles ---------------------------------------------------
+
+a_initial = np.linspace(Rd/Y, Rd, N_testparticle) # Initial range of semi major axis to distribute particles
+for a in a_initial:
+    sim.add(a=a,
+            inc = np.random.uniform(low = -0.1, high = 0.1), # Inclination
+            Omega = np.random.uniform(high = np.pi),         # Longitude of ascending node
+            f=np.random.rand()*2.*np.pi) # Mass is set to 0 by default, random true anomaly
+    
+        
+# Print parameters for easy copy-pasting---------------------------------------
+
+print('Recoil z velocity in cm/s: ' + str(KVZcms))
+print('Recoil x velocity in cm/s: ' + str(KVXcms))
+print('Recoil y velocity in cm/s: ' + str(KVYcms))
+print('BH Mass: ' + str(BHM))
+print('Number of test Particles: ' + str(N_testparticle))
+print('Random seed: ' + str(RS))
+print('Number of frames to generate: ' + str(Nimg))
+print('Inner Radius: '+ str(Rd/Y))
+print('Outer Radius: '+ str(Rd))
+print('Schwarzschild Radius: '+ str(SwR))
+
+
+
+# Integration -----------------------------------------------------------------
+
+for i in range(Nimg):
+    if i == 0:
+        # Print the base simulation before any modification
+        coords = np.zeros((sim.N, 6))
+        sim.serialize_particle_data(xyzvxvyvz=coords)
+        fig, ([ax1, ax2], [ax3, ax4]) = plt.subplots(2,2, figsize = (12,10), dpi = 200)
+
+        # XY graph
+        ax1 = plt.subplot(2,2,3)
+        vz = coords[:,5]
+        #plt.scatter(coords[:,0], coords[:,1], alpha = 0.25, s = 2.5)
+        scatterxy = plt.scatter(coords[:,0], coords[:,1], c = vz, cmap = 'coolwarm_r', s = 2.5)
+        plt.colorbar(scatterxy, label = 'Z-Velocity')
+        plt.scatter(0,0, marker = '*', color = 'm', s = 75)
+        ax1.set_title("XY")
+
+        # YZ graph
+        ax2 = plt.subplot(2,2,4)
+        vx = coords[:,3]
+        #plt.scatter(coords[:,2],coords[:,1], color = 'b', alpha = 0.25, s = 2.5)
+        scatteryz = plt.scatter(coords[:,2], coords[:,1], c = vx, cmap = 'coolwarm', s = 2.5)
+        plt.colorbar(scatteryz, label = 'X-Velocity')
+        plt.scatter(0,0, marker = '*', color = 'm', s = 75)
+        plt.yticks(color='w')
+        ax2.set_title("YZ")
+
+        # XZ graph
+        ax3 = plt.subplot(2,2,1)
+        vy = coords[:,4]
+        #plt.scatter(coords[:,0],coords[:,2], color = 'b', alpha = 0.25, s = 2.5)
+        scatterxz = plt.scatter(coords[:,0], coords[:,2], c = vy, cmap = 'coolwarm', s = 2.5)
+        plt.colorbar(scatterxz, label = 'Y-Velocity')
+        plt.scatter(0,0, marker = '*', color = 'm', s = 75)
+        plt.xticks(color='w')
+        ax3.set_title("XZ")
+
+        # Empty space
+        ax4 = plt.subplot(2,2,2)
+        plt.scatter(0,0, alpha = 0)
+        plt.axis('off')
+        plt.tick_params(left = False, right = False , labelleft = False , labelbottom = False, bottom = False)
+        ax4.set_title("SMBH Recoil [Distance in AU]\nInitial Z velocity (cm/s): " + str(KVZcms)+"\nInitial X velocity (cm/s): "+ str(KVXcms)+"\nInitial Y velocity (cm/s): "+ str(KVYcms), fontsize = 13)
+        sim.step()
+   
+    else:
+        #Add velocity kick
+        sim.move_to_hel()             # Move to the heliocentric reference frame
+        sim.particles[0].vz = KVZcms     # Changing the z velocity of the central particle to __ (in code units)
+        sim.particles[0].vx = KVXcms
+        sim.particles[0].vy = KVYcms        
+        sim.move_to_hel()             # Move into the new central particle-frame
+        sim.step()
+        coords = np.zeros((sim.N, 6))
+        sim.serialize_particle_data(xyzvxvyvz=coords)
+        fig, ([ax1, ax2], [ax3, ax4]) = plt.subplots(2,2, figsize = (12,10), dpi = 200)
+
+        # XY graph
+        ax1 = plt.subplot(2,2,3)
+        vz = coords[:,5]
+        #plt.scatter(coords[:,0], coords[:,1], alpha = 0.25, s = 5)
+        scatterxy = plt.scatter(coords[:,0], coords[:,1], c = vz, cmap = 'coolwarm_r', s = 2.5)
+        plt.colorbar(scatterxy, label = 'Z-Velocity')
+        plt.scatter(0,0, marker = '*', color = 'm', s = 75)
+        ax1.set_title("XY")
+
+        # YZ graph
+        ax2 = plt.subplot(2,2,4)
+        vx = coords[:,3]
+        #plt.scatter(coords[:,2],coords[:,1], color = 'b', alpha = 0.25, s = 5)
+        scatteryz = plt.scatter(coords[:,2], coords[:,1], c = vx, cmap = 'coolwarm', s = 2.5)
+        plt.colorbar(scatteryz, label = 'X-Veloicty')
+        plt.scatter(0,0, marker = '*', color = 'm', s = 75)
+        plt.yticks(color='w')
+        ax2.set_title("YZ")
+
+        # XZ graph
+        ax3 = plt.subplot(2,2,1)
+        vy = coords[:,4]
+        #plt.scatter(coords[:,0],coords[:,2], color = 'b', alpha = 0.25, s = 5)
+        scatterxz = plt.scatter(coords[:,0], coords[:,2], c = vy, cmap = 'coolwarm', s = 2.5)
+        plt.colorbar(scatterxz, label = 'Y-Velocity')
+        plt.scatter(0,0, marker = '*', color = 'm', s = 75)
+        plt.xticks(color='w')
+        ax3.set_title("XZ")
+
+        # Empty space
+        ax4 = plt.subplot(2,2,2)
+        plt.scatter(0,0, alpha = 0)
+        plt.axis('off')
+        plt.tick_params(left = False, right = False , labelleft = False , labelbottom = False, bottom = False)
+        ax4.set_title("SMBH Recoil [Distance in AU]\nInitial Z velocity (cm/s): " + str(KVZcms)+"\nInitial X velocity (cm/s): "+ str(KVXcms)+"\nInitial Y velocity (cm/s): "+ str(KVYcms), fontsize = 13)
+    
+    # If you don't care about creating animations and only want to create the simulation comment out the next line
+    #plt.savefig("path/image_%s.jpg" % i)
+    # Save to binary file so it doesn't lose precision
+    sim.save_to_file("path/archive.bin") 
+    #Saving each plot to a file with it's own name to be created into a gif https://ezgif.com/maker
+    plt.close()
+
+
+#%% Begin Data Extraction
+
+# Removes previous files so the data is replaced if needed---------------------
+from contextlib import suppress
+with suppress(FileNotFoundError):
+    os.remove('path/simXdata.csv')
+    os.remove('path/simYdata.csv')
+    os.remove('path/simZdata.csv')
+    os.remove('path/simVXdata.csv')
+    os.remove('path/simVYdata.csv')
+    os.remove('path/simVZdata.csv')
+
+
+# Initialize Simulationarchive simulation--------------------------------------
+
+sa = rebound.Simulationarchive("path/archive.bin")
+N_archives = len(sa)
+
+
+# Initialize empty data arrays-------------------------------------------------
+
+save_times = np.zeros(N_archives)
+# 2 dimensional array of size N saves and M particles
+particles_x = np.zeros((N_archives, (N_testparticle + 1))) 
+particles_y = np.zeros((N_archives, (N_testparticle + 1)))
+particles_z = np.zeros((N_archives, (N_testparticle + 1)))
+particles_vx = np.zeros((N_archives, (N_testparticle + 1)))
+particles_vy = np.zeros((N_archives, (N_testparticle + 1)))
+particles_vz = np.zeros((N_archives, (N_testparticle + 1)))
+
+
+# Now loop through the saves and pull out all of the values of interest--------
+
+for i, sim in enumerate(sa):
+    save_times[i] = sim.t
+    for j in range(1, sim.N):
+        particles_x[i, j] = sim.particles[j].x
+        particles_y[i, j] = sim.particles[j].y
+        particles_z[i, j] = sim.particles[j].z
+        particles_vx[i, j] = sim.particles[j].vx
+        particles_vy[i, j] = sim.particles[j].vy
+        particles_vz[i, j] = sim.particles[j].vz
+
+
+# Save each individual parameter to its own CSV--------------------------------
+
+x_data = np.concatenate([[save_times], particles_x.T])
+np.savetxt('path/simXdata.csv',
+           x_data, delimiter=', ')
+
+vx_data = np.concatenate([[save_times], particles_vx.T])
+np.savetxt('path/simVXdata.csv', 
+           vx_data, delimiter=', ')
+
+y_data = np.concatenate([[save_times], particles_y.T])
+np.savetxt('path/simYdata.csv', 
+           y_data, delimiter=', ')
+
+vy_data = np.concatenate([[save_times], particles_vy.T])
+np.savetxt('path/simVYdata.csv', 
+           vy_data, delimiter=', ')
+
+z_data = np.concatenate([[save_times], particles_z.T])
+np.savetxt('path/simZdata.csv', 
+           z_data, delimiter=', ')
+
+vz_data = np.concatenate([[save_times], particles_vz.T])
+np.savetxt('path/simVZdata.csv', 
+           vz_data, delimiter=', ')
+
+
+# Read CSV files into dataframes-----------------------------------------------
+
+x = pd.read_csv('path/simXdata.csv')
+y = pd.read_csv('path/simYdata.csv')
+z = pd.read_csv('path/simZdata.csv')
+vx = pd.read_csv('path/simVXdata.csv')
+vy = pd.read_csv('path/simVYdata.csv')
+vz = pd.read_csv('path/simVZdata.csv')
+
+
+# Adjust z values so they all have the same initial 0 value--------------------
+
+# for i in range(1, sim.N):
+#     b = sim.particles[i].x + sim.particles[i].y
+#     zAdjust = b * np.tan(sim.particles[i].inc)
+#     zFix = zAdjust + z
+
+
+# Split CSVs into individual timestep CSVs-------------------------------------
+
+var_list = ['X', 'Y', 'Z', 'Vx', 'Vy', 'Vz']     # Column titles
+t_step = np.arange(Nimg)                         # Number of files it needs to make - Matches with # of images
+df_list = [x, y, z, vx, vy, vz]               # List of dataframes
+t_dict = {}
+for i, t in enumerate(t_step):                   # Loop through each column in each parameter csv
+    temp_df = pd.DataFrame()
+    for j, df in enumerate(df_list):
+        var = var_list[j]
+        temp_df[var] = df.iloc[0:, i]
+    # Save each timestep to separate CSV
+    temp_df.to_csv(f'path/t{t}.csv')
+    
+
+#%% Luminosity Calculations------------------------------------------------------
+
+timestep = 0    # What timestep to use for calculations
+sim = sa[timestep]
+
+xStep = pd.read_csv(f'path/t{timestep}.csv', usecols = ['X'])
+xStep = xStep['X'].tolist()
+
+yStep = pd.read_csv(f'path/t{timestep}.csv', usecols = ['Y'])
+yStep = yStep['Y'].tolist()
+
+zStep = pd.read_csv(f'path/t{timestep}.csv', usecols = ['Z'])
+zStep = zStep['Z'].tolist()
+
+vxStep = pd.read_csv(f'path/t{timestep}.csv', usecols = ['Vx'])
+vxStep = vxStep['Vx'].tolist()
+
+vyStep = pd.read_csv(f'path/t{timestep}.csv', usecols = ['Vy'])
+vyStep = vyStep['Vy'].tolist()
+
+vzStep = pd.read_csv(f'path/t{timestep}.csv', usecols = ['Vz'])
+vzStep = vzStep['Vz'].tolist()
+
+
+# Cloud radius-----------------------------------------------------------------
+
+
+# Turne these into random np.random.uniform(low = -0.1, high = 0.1)
+Rcl = np.linspace(10**12, 10**14, N_testparticle)
+for r in Rcl:
+    Rcl = Rcl
+
+# Gas and column density-------------------------------------------------------
+
+nr = np.linspace(10**8, 10**9, N_testparticle)
+for d in nr:
+    nr = nr
+    Nc = nr* Rcl
+
+
+# Cloud radial distance from center(m) and Keplerian velocity------------------
+
+Vkep = []
+dist = []
+r = []
+for i in range(N_testparticle+1):
+    r = (np.sqrt((sim.particles[i].x**2)+(sim.particles[i].y**2)+(sim.particles[i].z**2)))
+    dist.append(r)
+    with np.errstate(divide='ignore'):
+        kep = np.sqrt((6.67259e-8*BHMg)/r)
+        Vkep.append(kep)
+        
+Vkep.pop(0)
+dist.remove(0)
+
+# Ionization state of the cloud------------------------------------------------
+
+Urt = []
+for i in range(N_testparticle):
+    U = (Qh/(4*np.pi*((dist[i])**2)*c*nr[i]))
+    Urt.append(U)
+   
+Urt = np.array(Urt)
+
+
+# Radiation vs Matter-bounded cloud--------------------------------------------
+
+Lcl1 = np.zeros(N_testparticle) 
+Lcl2 = np.zeros(N_testparticle) 
+dc = np.zeros(N_testparticle)
+ds = np.zeros(N_testparticle)
+for i in range(N_testparticle):
+    dc[i] = Rcl[i] #average path length through cloud (proportional to Rcl)
+    ds[i] = ((c*Urt[i])/(alphaB*nr[i]))# From eqn 8 in paper
+
+
+# Individual cloud luminosity--------------------------------------------------
+
+for i in range(N_testparticle):
+    if ds[i]<dc[i]:
+        #elf.append((1/np.pi)*np.arcos(np.sin(theta)*np.cos(phi)))
+        Lcl1[i] = nr[i]**2*(alphaeff)*h*(nu)*np.pi*(Rcl[i]**2)*ds[i] # For ds<dc Radiation bounded
+    else:
+        #elf.append(1)    
+        Lcl2[i] = nr[i]**2*(alphaeff)*h*(nu)*np.pi*(Rcl[i]**2)*Rcl[i] # Matter bounded
+
+print('Total Cloud luminosity for timestep', timestep, ':', sum(Lcl1+Lcl2))
+
+
+# Belpro output for given timestep---------------------------------------------
+
+Urt = pd.DataFrame(Urt, columns = ['U'])
+Rcl = pd.DataFrame(Rcl, columns = ['Rcl'])
+nr = pd.DataFrame(nr, columns = ['hden'])
+Nc = pd.DataFrame(Nc, columns = ['Nc'])
+Lcl1 = pd.DataFrame(Lcl1, columns = ['Lcl1'])
+Lcl2 = pd.DataFrame(Lcl2, columns = ['Lcl2'])
+
+AddData = pd.concat([Urt, nr, Nc, Rcl, Lcl1, Lcl2], axis=1)
+list = [0,0,0,0,0,0]
+AddData.loc[0] = list
+AddData.to_csv(f'path/addData{timestep}.csv', index=False)
+
+dfTemp = pd.read_csv(f'path/t{timestep}.csv')
+dfTemp2 = pd.read_csv(f'path/addData{timestep}.csv')
+
+OutputData = pd.concat([dfTemp,dfTemp2], axis = 1)
+OutputData = OutputData.drop(OutputData.columns[[0]], axis = 1)
+OutputData.to_csv(f'path/OutputData{timestep}.csv')
