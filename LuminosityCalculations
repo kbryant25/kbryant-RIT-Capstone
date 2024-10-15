@@ -410,3 +410,56 @@ dfTemp2 = pd.read_csv(f'path/addData{timestep}.csv')
 OutputData = pd.concat([dfTemp,dfTemp2], axis = 1)
 OutputData = OutputData.drop(OutputData.columns[[0]], axis = 1)
 OutputData.to_csv(f'path/OutputData{timestep}.csv')
+
+#%% Simulated Spectra
+
+from scipy import stats
+plt.ion() 
+
+data = pd.read_csv(f'path/t{timestep}.csv')
+
+
+# Line of sight velocity-------------------------------------------------------
+
+if ObsInc == 90:
+    LoS = data['Vz']
+
+if ObsInc == 0:
+    LoS = data['Vy']
+      
+
+# Determine bin range----------------------------------------------------------
+
+numbin = 1000
+
+if abs(LoS.max())> abs(LoS.min()):
+    binsmax = LoS.max() 
+    binsmin = -LoS.max()
+if abs(LoS.max())< abs(LoS.min()):
+    binsmax = -LoS.min()
+    binsmin = LoS.min()
+
+bin_width = (binsmax - binsmin) / numbin
+
+
+# Total Luminosity in each bin-------------------------------------------------
+
+zeros = pd.DataFrame([0])
+Lvals = pd.concat([Lcl1,Lcl2], axis = 1)
+Lval = Lvals['Lcl1'] + Lvals['Lcl2']
+Lval = pd.concat([zeros, Lval])
+
+LoS = np.array(LoS)
+Lval = np.ravel(Lval)
+
+Lsum, sortedV, Bin = stats.binned_statistic_dd(LoS, Lval, statistic='sum', bins = numbin)    
+
+
+# Plot-------------------------------------------------------------------------
+
+fig, ax = plt.subplots(figsize=(10, 6))
+
+ax.plot(Lsum)
+ax.set(title = 'Simulated Spectra',
+       ylabel = 'Total Luminosity (ergs/s)',
+       xlabel = 'Velocity Bin')
