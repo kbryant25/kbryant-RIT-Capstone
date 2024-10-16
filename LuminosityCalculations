@@ -29,7 +29,6 @@ Y = 20                         # Size scaled to BLR
 Qh = 2.6*10**55                # Ionizing photon luminosity photons*s^-1
 Tsub = 1500                    # Dust sublimation temperature
 Cf = 1                         # Covering fraction
-Ntot = 1500                    # Number of clouds
 ObsInc = 1                     # Inclination to observer
 LAGN = 10**45                  # Bolometric luminosity erg s**-1  Sum of all clouds should be around 10**40
 ObsInc = 90                    # Inclination to observer 0-90 degrees
@@ -40,6 +39,7 @@ c =  2.998e10                  # cm/s
 
 
 # Calculated parameters--------------------------------------------------------
+
 KVZcms = KVZ * 2978589.05
 KVXcms = KVX * 2978589.05
 KVYcms = KVY * 2978589.05
@@ -49,6 +49,7 @@ Rd = (0.4*((((LAGN)/(10**45))**0.5)*((1500/Tsub)**2.6)))* 3.086e+18 # Dust subli
 
 
 # Constants--------------------------------------------------------------------
+
 alphaeff = 1.1*10**-13              # Effective recombination coefficient for Halpha cm^3*s^-1
 alphaB = 2.6*10**-13                # Recombination coefficient for hydrogen cm^3*s^-1
 Qh = 2.6*10**55                     # Ionizing photon luminosity photons*s^-1
@@ -56,8 +57,8 @@ h = 6.62607015*10**-27
 EffRecomb = 1.1 * 10**13            # cm^3 s^−1
 nu = (c)/(656*10**-6)
 
-
 plt.ioff() #Tells IDE to only save the plots and not display them for speed
+
 
 # Simulation ------------------------------------------------------------------
 
@@ -92,7 +93,6 @@ print('Number of frames to generate: ' + str(Nimg))
 print('Inner Radius: '+ str(Rd/Y))
 print('Outer Radius: '+ str(Rd))
 print('Schwarzschild Radius: '+ str(SwR))
-
 
 
 # Integration -----------------------------------------------------------------
@@ -200,6 +200,7 @@ for i in range(Nimg):
 #%% Begin Data Extraction
 
 # Removes previous files so the data is replaced if needed---------------------
+
 from contextlib import suppress
 with suppress(FileNotFoundError):
     os.remove('path/simXdata.csv')
@@ -410,6 +411,7 @@ dfTemp2 = pd.read_csv(f'path/addData{timestep}.csv')
 OutputData = pd.concat([dfTemp,dfTemp2], axis = 1)
 OutputData = OutputData.drop(OutputData.columns[[0]], axis = 1)
 OutputData.to_csv(f'path/OutputData{timestep}.csv')
+
 
 #%% Simulated Spectra
 
