@@ -1,8 +1,10 @@
+#%%
+#!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-Created on Wed Jul 3 11:21:09 2024
+Created on Fri Oct 18 21:17:46 2024
 
-@author: Karina Bryant
+@author: karina
 """
 
 import rebound
@@ -10,7 +12,8 @@ import numpy as np
 import matplotlib.pyplot as plt
 import os
 import pandas as pd
-
+import glob
+from scipy import stats
 
 
 # User Set Parameters --------------------------------------------------------------
@@ -22,8 +25,8 @@ KVZ = 25                      # Kick velocity in 2piAU/year = 2978589.05 cm / s
 KVX = 0
 KVY = 0
 RS = None                      # Set seed for repeatability
-N_testparticle = 5000          # Number of test particles
-Nimg = 50                      # Number of frames 
+N_testparticle = 1000          # Number of test particles
+Nimg = 500                      # Number of frames 
 LAGN = 10**45                  # ergs/s  use for dust sublimation radius
 Y = 20                         # Size scaled to BLR
 Qh = 2.6*10**55                # Ionizing photon luminosity photons*s^-1
@@ -40,9 +43,13 @@ c =  2.998e10                  # cm/s
 
 # Calculated parameters--------------------------------------------------------
 
-KVZcms = KVZ * 2978589.05
+KVZcms = KVZ * 2978589.05 # cm/s
 KVXcms = KVX * 2978589.05
 KVYcms = KVY * 2978589.05
+KVXkms = KVX * 29.7858905 # km/s
+KVYkms = KVY * 29.7858905
+KVZkms = KVZ * 29.7858905
+
 BHMg = BHM * 1.989e+33              # Solar mass to g
 SwR = ((2*BHMg*(6.67e-8))/(c**2))   # Schwarzschild Radius (cm)
 Rd = (0.4*((((LAGN)/(10**45))**0.5)*((1500/Tsub)**2.6)))* 3.086e+18 # Dust sublimation radius
@@ -59,6 +66,29 @@ nu = (c)/(656*10**-6)
 
 plt.ioff() #Tells IDE to only save the plots and not display them for speed
 
+# Removes previous files so the data is replaced if needed---------------------
+
+path = 'path'
+
+def delete_files_in_directory(directory_path):
+   try:
+     files = glob.glob(os.path.join(directory_path, '*'))
+     for file in files:
+       if os.path.isfile(file):
+         os.remove(file)
+     print("All files deleted successfully.")
+   except OSError:
+     print("Error occurred while deleting files.")
+
+# Usage
+directory_path1 = 'path/AnimationFolder'
+directory_path2 = 'path/RawData'
+directory_path3 = 'path/TimestepData'
+
+delete_files_in_directory(directory_path1)
+delete_files_in_directory(directory_path2)
+delete_files_in_directory(directory_path3)
+
 
 # Simulation ------------------------------------------------------------------
 
@@ -67,7 +97,8 @@ Jacobi coordinates (center-of-mass frame)"""
 
 sim = rebound.Simulation()    # Initialize the simulation
 sim.units = ('cm', 's', 'g')  # Set simulation units
-sim.add(m = BHM)              # Add the central particle
+sim.ri_ias15.min_dt = 100     # Set minimum timestep
+sim.add(m = BHMg)              # Add the central particle
 np.random.seed(RS)            # Random seed for test cases
 
 
@@ -138,9 +169,9 @@ for i in range(Nimg):
         plt.scatter(0,0, alpha = 0)
         plt.axis('off')
         plt.tick_params(left = False, right = False , labelleft = False , labelbottom = False, bottom = False)
-        ax4.set_title("SMBH Recoil [Distance in AU]\nInitial Z velocity (cm/s): " + str(KVZcms)+"\nInitial X velocity (cm/s): "+ str(KVXcms)+"\nInitial Y velocity (cm/s): "+ str(KVYcms), fontsize = 13)
+        ax4.set_title("SMBH Recoil [Distance in cm]\nInitial Z velocity (km/s): " + str(KVZkms)+"\nInitial X velocity (km/s): "+ str(KVXkms)+"\nInitial Y velocity (km/s): "+ str(KVYkms)+'\nTimestep: '+ str(sim.t)+'seconds', fontsize = 13)
         sim.step()
-   
+
     else:
         #Add velocity kick
         sim.move_to_hel()             # Move to the heliocentric reference frame
@@ -187,33 +218,20 @@ for i in range(Nimg):
         plt.scatter(0,0, alpha = 0)
         plt.axis('off')
         plt.tick_params(left = False, right = False , labelleft = False , labelbottom = False, bottom = False)
-        ax4.set_title("SMBH Recoil [Distance in AU]\nInitial Z velocity (cm/s): " + str(KVZcms)+"\nInitial X velocity (cm/s): "+ str(KVXcms)+"\nInitial Y velocity (cm/s): "+ str(KVYcms), fontsize = 13)
-    
-    # If you don't care about creating animations and only want to create the simulation comment out the next line
-    #plt.savefig("path/image_%s.jpg" % i)
-    # Save to binary file so it doesn't lose precision
-    sim.save_to_file("path/archive.bin") 
-    #Saving each plot to a file with it's own name to be created into a gif https://ezgif.com/maker
+        ax4.set_title("SMBH Recoil [Distance in cm]\nInitial Z velocity (km/s): " + str(KVZkms)+"\nInitial X velocity (km/s): "+ str(KVXkms)+"\nInitial Y velocity (km/s): "+ str(KVYkms)+'\nTimestep: '+ str(sim.t)+'seconds', fontsize = 13)
+    if i % 10 == 0: # Saves every 10th timestep
+        plt.savefig("path/AnimationFolder/image_%s.jpg" % i)
+        # Save to binary file so it doesn't lose precision
+        sim.save_to_file("path/RawData/archive.bin") 
+        #Saving each plot to a file with it's own name to be created into a gif https://ezgif.com/maker
     plt.close()
 
 
-#%% Begin Data Extraction
-
-# Removes previous files so the data is replaced if needed---------------------
-
-from contextlib import suppress
-with suppress(FileNotFoundError):
-    os.remove('path/simXdata.csv')
-    os.remove('path/simYdata.csv')
-    os.remove('path/simZdata.csv')
-    os.remove('path/simVXdata.csv')
-    os.remove('path/simVYdata.csv')
-    os.remove('path/simVZdata.csv')
-
+# %% Begin Data Extraction
 
 # Initialize Simulationarchive simulation--------------------------------------
 
-sa = rebound.Simulationarchive("path/archive.bin")
+sa = rebound.Simulationarchive("path/RawData/archive.bin")
 N_archives = len(sa)
 
 
@@ -245,52 +263,44 @@ for i, sim in enumerate(sa):
 # Save each individual parameter to its own CSV--------------------------------
 
 x_data = np.concatenate([[save_times], particles_x.T])
-np.savetxt('path/simXdata.csv',
+np.savetxt('path/RawData/simXdata.csv',
            x_data, delimiter=', ')
 
 vx_data = np.concatenate([[save_times], particles_vx.T])
-np.savetxt('path/simVXdata.csv', 
+np.savetxt('path/RawData/simVXdata.csv', 
            vx_data, delimiter=', ')
 
 y_data = np.concatenate([[save_times], particles_y.T])
-np.savetxt('path/simYdata.csv', 
+np.savetxt('path/RawData/simYdata.csv', 
            y_data, delimiter=', ')
 
 vy_data = np.concatenate([[save_times], particles_vy.T])
-np.savetxt('path/simVYdata.csv', 
+np.savetxt('path/RawData/simVYdata.csv', 
            vy_data, delimiter=', ')
 
 z_data = np.concatenate([[save_times], particles_z.T])
-np.savetxt('path/simZdata.csv', 
+np.savetxt('path/RawData/simZdata.csv', 
            z_data, delimiter=', ')
 
 vz_data = np.concatenate([[save_times], particles_vz.T])
-np.savetxt('path/simVZdata.csv', 
+np.savetxt('path/RawData/simVZdata.csv', 
            vz_data, delimiter=', ')
 
 
 # Read CSV files into dataframes-----------------------------------------------
 
-x = pd.read_csv('path/simXdata.csv')
-y = pd.read_csv('path/simYdata.csv')
-z = pd.read_csv('path/simZdata.csv')
-vx = pd.read_csv('path/simVXdata.csv')
-vy = pd.read_csv('path/simVYdata.csv')
-vz = pd.read_csv('path/simVZdata.csv')
-
-
-# Adjust z values so they all have the same initial 0 value--------------------
-
-# for i in range(1, sim.N):
-#     b = sim.particles[i].x + sim.particles[i].y
-#     zAdjust = b * np.tan(sim.particles[i].inc)
-#     zFix = zAdjust + z
+x = pd.read_csv('path/RawData/simXdata.csv')
+y = pd.read_csv('path/RawData/simYdata.csv')
+z = pd.read_csv('path/RawData/simZdata.csv')
+vx = pd.read_csv('path/RawData/simVXdata.csv')
+vy = pd.read_csv('path/RawData/simVYdata.csv')
+vz = pd.read_csv('path/RawData/simVZdata.csv')
 
 
 # Split CSVs into individual timestep CSVs-------------------------------------
 
 var_list = ['X', 'Y', 'Z', 'Vx', 'Vy', 'Vz']     # Column titles
-t_step = np.arange(Nimg)                         # Number of files it needs to make - Matches with # of images
+t_step = np.arange(len(sa))                         # Number of files it needs to make - Matches with # of images
 df_list = [x, y, z, vx, vy, vz]               # List of dataframes
 t_dict = {}
 for i, t in enumerate(t_step):                   # Loop through each column in each parameter csv
@@ -299,7 +309,7 @@ for i, t in enumerate(t_step):                   # Loop through each column in e
         var = var_list[j]
         temp_df[var] = df.iloc[0:, i]
     # Save each timestep to separate CSV
-    temp_df.to_csv(f'path/t{t}.csv')
+    temp_df.to_csv(f'path/TimestepData/t{t}.csv')
     
 
 #%% Luminosity Calculations------------------------------------------------------
@@ -307,37 +317,41 @@ for i, t in enumerate(t_step):                   # Loop through each column in e
 timestep = 0    # What timestep to use for calculations
 sim = sa[timestep]
 
-xStep = pd.read_csv(f'path/t{timestep}.csv', usecols = ['X'])
+xStep = pd.read_csv(f'path/TimestepData/t{timestep}.csv', usecols = ['X'])
 xStep = xStep['X'].tolist()
 
-yStep = pd.read_csv(f'path/t{timestep}.csv', usecols = ['Y'])
+yStep = pd.read_csv(f'path/TimestepData/t{timestep}.csv', usecols = ['Y'])
 yStep = yStep['Y'].tolist()
 
-zStep = pd.read_csv(f'path/t{timestep}.csv', usecols = ['Z'])
+zStep = pd.read_csv(f'path/TimestepData/t{timestep}.csv', usecols = ['Z'])
 zStep = zStep['Z'].tolist()
 
-vxStep = pd.read_csv(f'path/t{timestep}.csv', usecols = ['Vx'])
+vxStep = pd.read_csv(f'path/TimestepData/t{timestep}.csv', usecols = ['Vx'])
 vxStep = vxStep['Vx'].tolist()
 
-vyStep = pd.read_csv(f'path/t{timestep}.csv', usecols = ['Vy'])
+vyStep = pd.read_csv(f'path/TimestepData/t{timestep}.csv', usecols = ['Vy'])
 vyStep = vyStep['Vy'].tolist()
 
-vzStep = pd.read_csv(f'path/t{timestep}.csv', usecols = ['Vz'])
+vzStep = pd.read_csv(f'path/TimestepData/t{timestep}.csv', usecols = ['Vz'])
 vzStep = vzStep['Vz'].tolist()
 
 
 # Cloud radius-----------------------------------------------------------------
 
-
-# Turne these into random np.random.uniform(low = -0.1, high = 0.1)
 Rcl = np.linspace(10**12, 10**14, N_testparticle)
 for r in Rcl:
     Rcl = Rcl
+# Turne these into random np.random.uniform(low = -0.1, high = 0.1)
+#Rcl = []
+#for i in range(N_testparticle):
+#    radius = np.random.uniform(low = 10**12, high = 10**14)
+#    Rcl.append(radius)
+
 
 # Gas and column density-------------------------------------------------------
 
 nr = np.linspace(10**8, 10**9, N_testparticle)
-for d in nr:
+for i in nr:
     nr = nr
     Nc = nr* Rcl
 
@@ -356,6 +370,7 @@ for i in range(N_testparticle+1):
         
 Vkep.pop(0)
 dist.remove(0)
+
 
 # Ionization state of the cloud------------------------------------------------
 
@@ -403,22 +418,22 @@ Lcl2 = pd.DataFrame(Lcl2, columns = ['Lcl2'])
 AddData = pd.concat([Urt, nr, Nc, Rcl, Lcl1, Lcl2], axis=1)
 list = [0,0,0,0,0,0]
 AddData.loc[0] = list
-AddData.to_csv(f'path/addData{timestep}.csv', index=False)
+AddData.to_csv(f'path/RawData/addData{timestep}.csv', index=False)
 
-dfTemp = pd.read_csv(f'path/t{timestep}.csv')
-dfTemp2 = pd.read_csv(f'path/addData{timestep}.csv')
+dfTemp = pd.read_csv(f'path/TimestepData/t{timestep}.csv')
+dfTemp2 = pd.read_csv(f'path/RawData/addData{timestep}.csv')
 
 OutputData = pd.concat([dfTemp,dfTemp2], axis = 1)
 OutputData = OutputData.drop(OutputData.columns[[0]], axis = 1)
-OutputData.to_csv(f'path/OutputData{timestep}.csv')
+OutputData.to_csv(f'path/RawData/OutputData{timestep}.csv')
 
 
 #%% Simulated Spectra
 
-from scipy import stats
+ObsInc = 45
 plt.ion() 
 
-data = pd.read_csv(f'path/t{timestep}.csv')
+data = pd.read_csv(f'path/TimestepData/t{timestep}.csv')
 
 
 # Line of sight velocity-------------------------------------------------------
@@ -428,11 +443,34 @@ if ObsInc == 90:
 
 if ObsInc == 0:
     LoS = data['Vy']
-      
+
+def rotate_x(matrix, angle):
+    # Rotates a matrix about the x-axis by the specified angle
+    rotation_matrix = np.array([
+        [1, 0, 0],
+        [0, np.cos(angle), -np.sin(angle)],
+        [0, np.sin(angle), np.cos(angle)]
+    ])
+    return np.dot(rotation_matrix, matrix)
+
+if 0 < ObsInc < 90:
+    angle = ObsInc
+    rotatedLoS = []
+    coordinates = []
+    for i in range(N_testparticle+1):
+        posmatrix = np.array([sim.particles[i].x, sim.particles[i].y, sim.particles[i].z])
+        velmatrix = np.array([sim.particles[i].vx, sim.particles[i].vy, sim.particles[i].vz])
+        rotated_position = rotate_x(posmatrix, angle)
+        rotated_velocity = rotate_x(velmatrix,angle)
+        rotatedLoS.append(rotated_velocity)
+        coordinates.append(rotated_position)
+    LoS = [ x[2] for x in rotatedLoS] # New line of sight velocity is the new z-axis
+    LoS = np.array(LoS)
+
 
 # Determine bin range----------------------------------------------------------
 
-numbin = 1000
+numbin = 250
 
 if abs(LoS.max())> abs(LoS.min()):
     binsmax = LoS.max() 
@@ -462,6 +500,15 @@ Lsum, sortedV, Bin = stats.binned_statistic_dd(LoS, Lval, statistic='sum', bins 
 fig, ax = plt.subplots(figsize=(10, 6))
 
 ax.plot(Lsum)
-ax.set(title = 'Simulated Spectra',
+ax.set(title = 'Simulated Spectra\n Observation Angle: '+str(ObsInc),
        ylabel = 'Total Luminosity (ergs/s)',
-       xlabel = 'Velocity Bin')
+       xlabel = 'Velocity Bin (Number of Bins: '+str(numbin)+')')
+
+xticks = np.arange(0, numbin+1, numbin/5)
+index = xticks.astype(int).tolist()
+sortedV = np.array(sortedV)
+sortedV = np.transpose(sortedV)
+labels = sortedV[index]
+formatted_labels = np.round(labels, decimals=3)
+
+ax.set_xticks(xticks, labels = formatted_labels)
