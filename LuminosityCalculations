@@ -13,7 +13,6 @@ import matplotlib.pyplot as plt
 import os
 import pandas as pd
 import glob
-from scipy import stats
 
 
 # User Set Parameters --------------------------------------------------------------
@@ -21,12 +20,12 @@ from scipy import stats
 
 
 BHM = 6.5e8                    # Black hole mass in solar masses
-KVZ = 25                      # Kick velocity in 2piAU/year = 2978589.05 cm / s
+KVZ = 45e5                      # Kick velocity cm / s
 KVX = 0
 KVY = 0
 RS = None                      # Set seed for repeatability
 N_testparticle = 1000          # Number of test particles
-Nimg = 500                      # Number of frames 
+Nimg = 300                      # Number of frames 
 LAGN = 10**45                  # ergs/s  use for dust sublimation radius
 Y = 20                         # Size scaled to BLR
 Qh = 2.6*10**55                # Ionizing photon luminosity photons*s^-1
@@ -42,13 +41,6 @@ c =  2.998e10                  # cm/s
 
 
 # Calculated parameters--------------------------------------------------------
-
-KVZcms = KVZ * 2978589.05 # cm/s
-KVXcms = KVX * 2978589.05
-KVYcms = KVY * 2978589.05
-KVXkms = KVX * 29.7858905 # km/s
-KVYkms = KVY * 29.7858905
-KVZkms = KVZ * 29.7858905
 
 BHMg = BHM * 1.989e+33              # Solar mass to g
 SwR = ((2*BHMg*(6.67e-8))/(c**2))   # Schwarzschild Radius (cm)
@@ -68,8 +60,6 @@ plt.ioff() #Tells IDE to only save the plots and not display them for speed
 
 # Removes previous files so the data is replaced if needed---------------------
 
-path = 'path'
-
 def delete_files_in_directory(directory_path):
    try:
      files = glob.glob(os.path.join(directory_path, '*'))
@@ -80,7 +70,6 @@ def delete_files_in_directory(directory_path):
    except OSError:
      print("Error occurred while deleting files.")
 
-# Usage
 directory_path1 = 'path/AnimationFolder'
 directory_path2 = 'path/RawData'
 directory_path3 = 'path/TimestepData'
@@ -97,7 +86,7 @@ Jacobi coordinates (center-of-mass frame)"""
 
 sim = rebound.Simulation()    # Initialize the simulation
 sim.units = ('cm', 's', 'g')  # Set simulation units
-sim.ri_ias15.min_dt = 100     # Set minimum timestep
+sim.ri_ias15.min_dt = 100     # Set minimum timestep length in seconds
 sim.add(m = BHMg)              # Add the central particle
 np.random.seed(RS)            # Random seed for test cases
 
@@ -114,9 +103,9 @@ for a in a_initial:
         
 # Print parameters for easy copy-pasting---------------------------------------
 
-print('Recoil z velocity in cm/s: ' + str(KVZcms))
-print('Recoil x velocity in cm/s: ' + str(KVXcms))
-print('Recoil y velocity in cm/s: ' + str(KVYcms))
+print('Recoil z velocity in cm/s: ' + str(KVZ))
+print('Recoil x velocity in cm/s: ' + str(KVX))
+print('Recoil y velocity in cm/s: ' + str(KVY))
 print('BH Mass: ' + str(BHM))
 print('Number of test Particles: ' + str(N_testparticle))
 print('Random seed: ' + str(RS))
@@ -143,6 +132,7 @@ for i in range(Nimg):
         plt.colorbar(scatterxy, label = 'Z-Velocity')
         plt.scatter(0,0, marker = '*', color = 'm', s = 75)
         ax1.set_title("XY")
+        ax1.set_xlabel('Distance in cm')
 
         # YZ graph
         ax2 = plt.subplot(2,2,4)
@@ -153,6 +143,7 @@ for i in range(Nimg):
         plt.scatter(0,0, marker = '*', color = 'm', s = 75)
         plt.yticks(color='w')
         ax2.set_title("YZ")
+        ax2.set_xlabel('Distance in cm')
 
         # XZ graph
         ax3 = plt.subplot(2,2,1)
@@ -163,21 +154,21 @@ for i in range(Nimg):
         plt.scatter(0,0, marker = '*', color = 'm', s = 75)
         plt.xticks(color='w')
         ax3.set_title("XZ")
+        ax3.set_ylabel('Distance in cm')
 
         # Empty space
         ax4 = plt.subplot(2,2,2)
         plt.scatter(0,0, alpha = 0)
         plt.axis('off')
         plt.tick_params(left = False, right = False , labelleft = False , labelbottom = False, bottom = False)
-        ax4.set_title("SMBH Recoil [Distance in cm]\nInitial Z velocity (km/s): " + str(KVZkms)+"\nInitial X velocity (km/s): "+ str(KVXkms)+"\nInitial Y velocity (km/s): "+ str(KVYkms)+'\nTimestep: '+ str(sim.t)+'seconds', fontsize = 13)
+        ax4.set_title("SMBH Recoil\nInitial Z velocity (km/s): " + str(KVZ)+"\nInitial X velocity (km/s): "+ str(KVX)+"\nInitial Y velocity (km/s): "+ str(KVY)+'\nTimestep: '+ str(sim.t)+' seconds', fontsize = 13)
         sim.step()
-
     else:
         #Add velocity kick
         sim.move_to_hel()             # Move to the heliocentric reference frame
-        sim.particles[0].vz = KVZcms     # Changing the z velocity of the central particle to __ (in code units)
-        sim.particles[0].vx = KVXcms
-        sim.particles[0].vy = KVYcms        
+        sim.particles[0].vz = KVZ     # Changing the z velocity of the central particle to __ (in code units)
+        sim.particles[0].vx = KVX
+        sim.particles[0].vy = KVY        
         sim.move_to_hel()             # Move into the new central particle-frame
         sim.step()
         coords = np.zeros((sim.N, 6))
@@ -187,43 +178,58 @@ for i in range(Nimg):
         # XY graph
         ax1 = plt.subplot(2,2,3)
         vz = coords[:,5]
-        #plt.scatter(coords[:,0], coords[:,1], alpha = 0.25, s = 5)
         scatterxy = plt.scatter(coords[:,0], coords[:,1], c = vz, cmap = 'coolwarm_r', s = 2.5)
         plt.colorbar(scatterxy, label = 'Z-Velocity')
         plt.scatter(0,0, marker = '*', color = 'm', s = 75)
         ax1.set_title("XY")
+        ax1.set_xlabel('Distance in cm')
 
         # YZ graph
         ax2 = plt.subplot(2,2,4)
         vx = coords[:,3]
-        #plt.scatter(coords[:,2],coords[:,1], color = 'b', alpha = 0.25, s = 5)
         scatteryz = plt.scatter(coords[:,2], coords[:,1], c = vx, cmap = 'coolwarm', s = 2.5)
         plt.colorbar(scatteryz, label = 'X-Veloicty')
         plt.scatter(0,0, marker = '*', color = 'm', s = 75)
         plt.yticks(color='w')
         ax2.set_title("YZ")
+        ax2.set_xlabel('Distance in cm')
 
         # XZ graph
         ax3 = plt.subplot(2,2,1)
         vy = coords[:,4]
-        #plt.scatter(coords[:,0],coords[:,2], color = 'b', alpha = 0.25, s = 5)
         scatterxz = plt.scatter(coords[:,0], coords[:,2], c = vy, cmap = 'coolwarm', s = 2.5)
         plt.colorbar(scatterxz, label = 'Y-Velocity')
         plt.scatter(0,0, marker = '*', color = 'm', s = 75)
         plt.xticks(color='w')
         ax3.set_title("XZ")
+        ax3.set_ylabel('Distance in cm')
 
         # Empty space
         ax4 = plt.subplot(2,2,2)
         plt.scatter(0,0, alpha = 0)
         plt.axis('off')
         plt.tick_params(left = False, right = False , labelleft = False , labelbottom = False, bottom = False)
-        ax4.set_title("SMBH Recoil [Distance in cm]\nInitial Z velocity (km/s): " + str(KVZkms)+"\nInitial X velocity (km/s): "+ str(KVXkms)+"\nInitial Y velocity (km/s): "+ str(KVYkms)+'\nTimestep: '+ str(sim.t)+'seconds', fontsize = 13)
-    if i % 10 == 0: # Saves every 10th timestep
+        ax4.set_title("SMBH Recoil\nInitial Z velocity (km/s): " + str(KVZ)+"\nInitial X velocity (km/s): "+ str(KVX)+"\nInitial Y velocity (km/s): "+ str(KVY)+'\nTimestep: '+ str(f"{sim.t:.3e}")+' seconds', fontsize = 13)
+    if i % 5 == 0:
+        #Save to binary file so it doesn't lose precision
         plt.savefig("path/AnimationFolder/image_%s.jpg" % i)
-        # Save to binary file so it doesn't lose precision
-        sim.save_to_file("path/RawData/archive.bin") 
-        #Saving each plot to a file with it's own name to be created into a gif https://ezgif.com/maker
+        #Saving each plot to a file with it's own name to be created into a gif https://ezgif.com/maker  
+    sim.save_to_file("path/RawData/archive.bin") 
+
+    # while i < 49:
+    #      if i % 2 == 0:
+    #         plt.savefig("path/AnimationFolder/image_%s.jpg" % i)
+    #         # Save to binary file so it doesn't lose precision
+    #         sim.save_to_file("path/RawData/archive.bin") 
+    #         #Saving each plot to a file with it's own name to be created into a gif https://ezgif.com/maker  
+    #         i = i + 1
+    # while i >= 49:
+    #     if i % 10 == 0:
+    #         plt.savefig("path/AnimationFolder/image_%s.jpg" % i)
+    #         # Save to binary file so it doesn't lose precision
+    #         sim.save_to_file("path/RawData/archive.bin") 
+    #         #Saving each plot to a file with it's own name to be created into a gif https://ezgif.com/maker  
+    #         i = i + 1
     plt.close()
 
 
@@ -314,7 +320,7 @@ for i, t in enumerate(t_step):                   # Loop through each column in e
 
 #%% Luminosity Calculations------------------------------------------------------
 
-timestep = 0    # What timestep to use for calculations
+timestep = 245    # What timestep to use for calculations
 sim = sa[timestep]
 
 xStep = pd.read_csv(f'path/TimestepData/t{timestep}.csv', usecols = ['X'])
@@ -370,7 +376,6 @@ for i in range(N_testparticle+1):
         
 Vkep.pop(0)
 dist.remove(0)
-
 
 # Ionization state of the cloud------------------------------------------------
 
@@ -440,23 +445,29 @@ data = pd.read_csv(f'path/TimestepData/t{timestep}.csv')
 
 if ObsInc == 90:
     LoS = data['Vz']
+    LoS = LoZ - KVZ
 
 if ObsInc == 0:
     LoS = data['Vy']
+    LoS = LoS - KVY
 
-def rotate_x(matrix, angle):
-    # Rotates a matrix about the x-axis by the specified angle
+def rotate_x(matrix, angle): # Rotation about the x-axis by inclination of observer
+
     rotation_matrix = np.array([
         [1, 0, 0],
         [0, np.cos(angle), -np.sin(angle)],
         [0, np.sin(angle), np.cos(angle)]
     ])
+
     return np.dot(rotation_matrix, matrix)
 
+theta = ObsInc*(np.pi/180)
+
 if 0 < ObsInc < 90:
-    angle = ObsInc
+    angle = theta
     rotatedLoS = []
     coordinates = []
+    rotatedKick = []
     for i in range(N_testparticle+1):
         posmatrix = np.array([sim.particles[i].x, sim.particles[i].y, sim.particles[i].z])
         velmatrix = np.array([sim.particles[i].vx, sim.particles[i].vy, sim.particles[i].vz])
@@ -464,9 +475,15 @@ if 0 < ObsInc < 90:
         rotated_velocity = rotate_x(velmatrix,angle)
         rotatedLoS.append(rotated_velocity)
         coordinates.append(rotated_position)
-    LoS = [ x[2] for x in rotatedLoS] # New line of sight velocity is the new z-axis
-    LoS = np.array(LoS)
+    for i in range(1):
+        kickmatrix = np.array([KVX,KVY,KVZ])
+        rotated_kick = rotate_x(kickmatrix,angle)
+    LoS = [ x[2] for x in rotatedLoS]
+    LoS = np.array(LoS) 
+    correction = rotated_kick[2]
+    LoS = LoS - correction
 
+from scipy import stats
 
 # Determine bin range----------------------------------------------------------
 
@@ -492,15 +509,16 @@ Lval = pd.concat([zeros, Lval])
 LoS = np.array(LoS)
 Lval = np.ravel(Lval)
 
+
 Lsum, sortedV, Bin = stats.binned_statistic_dd(LoS, Lval, statistic='sum', bins = numbin)    
 
 
 # Plot-------------------------------------------------------------------------
 
-fig, ax = plt.subplots(figsize=(10, 6))
+fig, ax = plt.subplots(figsize=(12, 6))
 
 ax.plot(Lsum)
-ax.set(title = 'Simulated Spectra\n Observation Angle: '+str(ObsInc),
+ax.set(title = 'Simulated Spectra\n Observation Angle: '+str(ObsInc)+' Degrees',
        ylabel = 'Total Luminosity (ergs/s)',
        xlabel = 'Velocity Bin (Number of Bins: '+str(numbin)+')')
 
@@ -509,6 +527,5 @@ index = xticks.astype(int).tolist()
 sortedV = np.array(sortedV)
 sortedV = np.transpose(sortedV)
 labels = sortedV[index]
-formatted_labels = np.round(labels, decimals=3)
 
-ax.set_xticks(xticks, labels = formatted_labels)
+ax.set_xticks(xticks, labels = labels)
