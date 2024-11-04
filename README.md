@@ -20,6 +20,8 @@ Extract position and velocity vectors for each particle from the N-Body code and
 - Calculate cloud luminosities
 - Create individual spectra for each timestep
 
+AGN-BEANS: Active Galactic Nuclei - Broadline Emission And N-body Simulation
+
 ## Part 3: Identify Trends in Profile Properties
 Explore the parameter space: e.g., black hole mass, kick velocity, inclination, initial cloud distribution and velocity field etc. And identify trends in the profile properties (width, shift, asymmetry, kurtosis) that we are measuring from quasar spectra. The end goal is to compare these model parameters with measurements obtained from SDSS (Sloan Digital Sky Survey) spectra done by Emily Temple for her master’s thesis.
 
