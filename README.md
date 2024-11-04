@@ -12,7 +12,7 @@ This code will be used to simulate the broad line region surrounding the SMBH an
 - Apply kick velocity to central mass
 - Customizable parameters (SMBH mass, velocity, angle, range, AGN shape)
 
-## Part 2: Data Extraction and Analysis (Clever code name pending)
+## Part 2: Data Extraction and Analysis aka AGN - BEANS
 Extract position and velocity vectors for each particle from the N-Body code and compile into a database. From there construct a code that is able to compute the line profiles from the database. From there spectroscopic analysis can be done on the emission lines created by the simulation.
 
 - Extract position and velocity data from Rebound binary file
