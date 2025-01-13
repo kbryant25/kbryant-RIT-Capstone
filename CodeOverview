@@ -6,7 +6,7 @@ runs of the code the variables are fed into a (heavily) modified amalgamation of
 Test Particles(https://rebound.readthedocs.io/en/latest/ipython_examples/Testparticles/) examples 
 provided in the Rebound Documentation(https://rebound.readthedocs.io/en/latest/). 
 Rebound is an open source N-body integrator python package and is the backbone for this entire project. 
-Once Rebound outputs the file of position and velocityvectors for each particle and the data has been 
+Once Rebound outputs the file of position and velocity vectors for each particle and the data has been 
 extracted from the binary file the analysis can begin. Our first step is to use our newly extracted 
 data to calculate the luminosity of each individual particle. Once each particle has an assigned 
 luminosity as well as a few other parameters it is assigned a velocity bin based on its line of sight 
