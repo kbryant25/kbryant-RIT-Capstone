@@ -27,14 +27,11 @@ KVZ = 3000e5                   # Kick velocity cm / s
 KVX = 0
 KVY = 0
 RS = 42                        # Set seed for repeatability
-N_testparticle = 10000          # Number of test particles
-Nimg = 501                     # Number of frames 
-LAGN = 10**45                  # ergs/s used for dust sublimation radius
+N_testparticle = 3000          # Number of test particles
+Nimg = 50                    # Number of frames 
 Y = 20                         # Size scaled to BLR
-Qh = 2.6e55                    # Ionizing photon luminosity photons*s^-1
 Tsub = 1500                    # Dust sublimation temperature
 Cf = 1                         # Covering fraction
-LAGN = 10**45                  # Bolometric luminosity erg s**-1  Sum of all clouds should be around 10**40
 Eratio = 1                     # Eddington ratio
 sigma = 1                      # Angular width
 p = 1                          # Cloud distribution power law
@@ -45,14 +42,17 @@ c =  2.998e10                  # cm/s
 
 BHMg = BHM * 1.989e+33              # Solar mass to g
 SwR = ((2*BHMg*(6.67e-8))/(c**2))   # Schwarzschild Radius (cm)
+LEdd = 1.26e38*(BHMg/1.989e33)
+LAGN = Eratio*LEdd                  # Bolometric luminosity erg s**-1  Sum of all clouds should be around 10**40
 Rd = (0.4*((((LAGN)/(10**45))**0.5)*((1500/Tsub)**2.6)))* 3.086e+18 # Dust sublimation radius
+
+Qh = 2.6e55                     # Ionizing photon luminosity photons*s^-1
 
 
 # Constants--------------------------------------------------------------------
 
 alphaeff = 1.1e-13              # Effective recombination coefficient for Halpha cm^3*s^-1
 alphaB = 2.6e-13                # Recombination coefficient for hydrogen cm^3*s^-1
-Qh = 2.6e55                     # Ionizing photon luminosity photons*s^-1
 h = 6.62607015e-27 
 EffRecomb = 1.1e13            # cm^3 s^−1
 nu = (c)/(656e-7)
@@ -70,8 +70,6 @@ def delete_files_in_directory(directory_path):
      print("All files deleted successfully.")
    except OSError:
      print("Error occurred while deleting files.")
-
-path = '/enter your file path here'
 
 directory_path1 = 'path/AnimationFolder'
 directory_path2 = 'path/RawData'
@@ -119,6 +117,7 @@ print('Number of frames to generate: ' + str(Nimg))
 print('Inner Radius: '+ str(Rd/Y))
 print('Outer Radius: '+ str(Rd))
 print('Schwarzschild Radius: '+ str(SwR))
+print('AGN Luminosity: '+ str(LAGN))
  
 
 # Integration -----------------------------------------------------------------
@@ -218,7 +217,7 @@ for i in range(Nimg):
         plt.axis('off')
         plt.tick_params(left = False, right = False , labelleft = False , labelbottom = False, bottom = False)
         ax4.set_title("SMBH Recoil\nInitial Z velocity (cm/s): " + str(KVZ)+"\nInitial X velocity (cm/s): "+ str(KVX)+"\nInitial Y velocity (cm/s): "+ str(KVY)+'\nTimestep: '+ str(f"{sim.t:.3e}")+' seconds', fontsize = 13)
-    if i % 10 == 0: # Saves every 10th timestep to an image
+    if i % 50 == 0: # Saves every 10th timestep to an image
         plt.savefig("path/AnimationFolder/image_%s.jpg" % i)
         #Saving each plot to a file with it's own name to be created into a gif https://ezgif.com/maker  
     sim.save_to_file("path/RawData/archive.bin") 
@@ -312,10 +311,10 @@ for i, t in enumerate(t_step):                   # Loop through each column in e
 
 #%% Luminosity Calculations------------------------------------------------------
 
-ObsInc = 0 # Inclination of observer
+ObsInc = 90 # Inclination of observer
 plt.ion() 
 
-timestep = 00    # What timestep to use for calculations
+timestep = 0    # What timestep to use for calculations
 sim = sa[timestep]
 
 
@@ -470,7 +469,7 @@ if 0 < ObsInc < 90:
     LoS = [ x[2] for x in rotatedLoS]
     LoS = np.array(LoS) 
 
-# For normalization if kick is along z axis (Only use if you are planning to normalize the spectrum)
+# For normalization if kick is along z axis (Only use if you are planning to normalize the)
 #if ObsInc == 90:
 #    Los = LoS/KVZ
 
@@ -501,19 +500,34 @@ Lval = np.ravel(Lval)
 
 Lsum, sortedV, Bin = stats.binned_statistic_dd(LoS, Lval, statistic='sum', bins = numbin)    
 
+sortedV = np.array(sortedV)
+sortedV = np.swapaxes(sortedV,0,1)
+sortedV = sortedV[:-1]
+
 # Plot-------------------------------------------------------------------------
 
-fig, ax = plt.subplots(figsize=(12, 8), dpi = 200)
+fig, ax = plt.subplots(figsize=(15, 8), dpi = 100)
 
-ax.plot(Lsum)
+ax.plot(sortedV,Lsum)
 ax.set(title = 'Simulated Spectra\nTime Passed:'+str(f"{sim.t:.3e}"+' seconds'),
        ylabel = 'Total Luminosity (ergs/s)',
-       xlabel = 'Velocity Bins '+str(numbin)+' (velocity in cm/s)')
+       xlabel = 'Line of Sight Velocity (cm/s)\nVelocity Bins '+str(numbin))
 
-xticks = np.arange(0, numbin+1, numbin/5)
-index = xticks.astype(int).tolist()
-sortedV = np.array(sortedV)
-sortedV = np.transpose(sortedV)
-labels = np.round(sortedV[index],decimals = 3)
+ax.spines['top'].set_visible(False)
+ax.spines['right'].set_visible(False)
 
-ax.set_xticks(xticks, labels = labels)
+ax.axvline(x=0, color = 'red', linestyle = '--', alpha = 0.5)
+
+from matplotlib.ticker import FormatStrFormatter
+import matplotlib.ticker as tick
+#ax.xaxis.set_major_formatter(FormatStrFormatter('%.2f'))
+
+#def x_fmt(x, y):
+#    return '{:2.2e}'.format(x).replace('e', 'x10^')
+
+#ax.xaxis.set_major_formatter(tick.FuncFormatter(x_fmt))
+
+#%%
+
+sim.cite()
+# %%
