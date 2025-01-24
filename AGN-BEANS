@@ -23,12 +23,12 @@ from scipy import stats
 
 
 BHM = 6.5e8                    # Black hole mass in solar masses
-KVZ = 3000e5                   # Kick velocity cm / s
+KVZ = 1000e5                   # Kick velocity cm / s
 KVX = 0
 KVY = 0
 RS = 42                        # Set seed for repeatability
 N_testparticle = 3000          # Number of test particles
-Nimg = 50                    # Number of frames 
+Nimg = 101                    # Number of frames 
 Y = 20                         # Size scaled to BLR
 Tsub = 1500                    # Dust sublimation temperature
 Cf = 1                         # Covering fraction
@@ -45,9 +45,8 @@ SwR = ((2*BHMg*(6.67e-8))/(c**2))   # Schwarzschild Radius (cm)
 LEdd = 1.26e38*(BHMg/1.989e33)
 LAGN = Eratio*LEdd                  # Bolometric luminosity erg s**-1  Sum of all clouds should be around 10**40
 Rd = (0.4*((((LAGN)/(10**45))**0.5)*((1500/Tsub)**2.6)))* 3.086e+18 # Dust sublimation radius
-
-Qh = 2.6e55                     # Ionizing photon luminosity photons*s^-1
-
+qagnratio = 2.6e55/10e45            # Base ratio of ionizing photon luminosity to AGN luminosity
+Q = qagnratio*LAGN                  # Ionizing photon luminosity photons/s
 
 # Constants--------------------------------------------------------------------
 
@@ -118,6 +117,7 @@ print('Inner Radius: '+ str(Rd/Y))
 print('Outer Radius: '+ str(Rd))
 print('Schwarzschild Radius: '+ str(SwR))
 print('AGN Luminosity: '+ str(LAGN))
+print('Ionizing Photon Luminosity: '+str(Q))
  
 
 # Integration -----------------------------------------------------------------
@@ -310,11 +310,12 @@ for i, t in enumerate(t_step):                   # Loop through each column in e
     
 
 #%% Luminosity Calculations------------------------------------------------------
+''' Used for plotting a single timestep. See next section for multi-plotting '''
 
 ObsInc = 90 # Inclination of observer
 plt.ion() 
 
-timestep = 0    # What timestep to use for calculations
+timestep = 50    # What timestep to use for calculations
 sim = sa[timestep]
 
 
@@ -374,7 +375,7 @@ dist.remove(0)
 
 Urt = []
 for i in range(N_testparticle):
-    U = (Qh/(4*np.pi*((dist[i])**2)*c*nr[i]))
+    U = (Q/(4*np.pi*((dist[i])**2)*c*nr[i]))
     Urt.append(U)
    
 Urt = np.array(Urt)
@@ -527,7 +528,191 @@ import matplotlib.ticker as tick
 
 #ax.xaxis.set_major_formatter(tick.FuncFormatter(x_fmt))
 
-#%%
+#%% Multi plot---------------------------------------------------------------------
+'''Used when you want to generate line profiles for multiple timesteps at the same time
+for the sake of efficiency'''
 
-sim.cite()
-# %%
+ObsInc = 90 # Inclination of observer
+plt.ion() 
+
+timesteps = [0, 25, 50, 75, 100]    # What timestep to use for calculations
+
+for i,step in enumerate(timesteps):
+    sim = sa[timesteps[i]]
+
+    # Read timestep data-------------------------------------------------------------
+
+    xStep = pd.read_csv(f'path/TimestepData/t{timesteps[i]}.csv', usecols = ['X'])
+    xStep = xStep['X'].tolist()
+
+    yStep = pd.read_csv(f'path/TimestepData/t{timesteps[i]}.csv', usecols = ['Y'])
+    yStep = yStep['Y'].tolist()
+
+    zStep = pd.read_csv(f'path/TimestepData/t{timesteps[i]}.csv', usecols = ['Z'])
+    zStep = zStep['Z'].tolist()
+
+    vxStep = pd.read_csv(f'path/TimestepData/t{timesteps[i]}.csv', usecols = ['Vx'])
+    vxStep = vxStep['Vx'].tolist()
+
+    vyStep = pd.read_csv(f'path/TimestepData/t{timesteps[i]}.csv', usecols = ['Vy'])
+    vyStep = vyStep['Vy'].tolist()
+
+    vzStep = pd.read_csv(f'path/TimestepData/t{timesteps[i]}.csv', usecols = ['Vz'])
+    vzStep = vzStep['Vz'].tolist()
+
+
+    # Cloud radius-----------------------------------------------------------------
+
+    Rcl = []
+    for i in range(N_testparticle):
+        radius = np.random.uniform(low = 10**12, high = 10**14) # cm
+        Rcl.append(radius)
+
+
+    # Gas and column density-------------------------------------------------------
+
+    nr = np.linspace(10**8, 10**9, N_testparticle)
+    for i in nr:
+        nr = nr
+        Nc = nr* Rcl
+
+
+    # Cloud radial distance from center and Keplerian velocity---------------------
+
+    Vkep = []
+    dist = []
+    r = []
+    for i in range(N_testparticle+1):
+        r = (np.sqrt(((sim.particles[0].x-sim.particles[i].x)**2)+((sim.particles[0].y-sim.particles[i].y)**2)+((sim.particles[0].z-sim.particles[i].z)**2)))
+        dist.append(r)
+        with np.errstate(divide='ignore'):
+            kep = np.sqrt((6.67259e-8*BHMg)/r)
+            Vkep.append(kep)
+        
+    Vkep.pop(0)
+    dist.remove(0)
+
+    # Ionization state of the cloud------------------------------------------------
+
+    Urt = []
+    for i in range(N_testparticle):
+        U = (Q/(4*np.pi*((dist[i])**2)*c*nr[i]))
+        Urt.append(U)
+   
+    Urt = np.array(Urt)
+
+
+    # Radiation vs Matter-bounded cloud--------------------------------------------
+
+    Lcl1 = np.zeros(N_testparticle) 
+    Lcl2 = np.zeros(N_testparticle) 
+    dc = np.zeros(N_testparticle)
+    ds = np.zeros(N_testparticle)
+
+    for i in range(N_testparticle):
+        dc[i] = Rcl[i]
+        ds[i] = ((c*Urt[i])/(alphaB*nr[i]))
+
+
+    # Individual cloud luminosity--------------------------------------------------
+
+    for i in range(N_testparticle):
+        if ds[i]<dc[i]:
+            Lcl1[i] = nr[i]**2*(alphaeff)*h*(nu)*np.pi*(Rcl[i]**2)*ds[i] # For ds<dc Radiation bounded
+        else:
+            Lcl2[i] = nr[i]**2*(alphaeff)*h*(nu)*np.pi*(Rcl[i]**2)*Rcl[i] # Matter bounded
+
+    # Simulated Spectra
+
+    #data = pd.read_csv(f'path/TimestepData/t{timesteps[i]}.csv')
+
+
+    # Line of sight velocity-------------------------------------------------------
+
+    if ObsInc == 90:
+        LoS = vzStep
+
+    if ObsInc == 0:
+        LoS = vyStep
+
+
+    def rotate_x(matrix, angle): # Rotation about the x-axis by inclination of observer
+
+        rotation_matrix = np.array([
+        [1, 0, 0],
+        [0, np.cos(angle), -np.sin(angle)],
+        [0, np.sin(angle), np.cos(angle)]
+    ])
+
+        return np.dot(rotation_matrix, matrix)
+
+    theta = ObsInc*(np.pi/180)
+
+    if 0 < ObsInc < 90:
+        angle = theta
+        rotatedLoS = []
+        coordinates = []
+        rotatedKick = []
+        for i in range(N_testparticle+1): # Particle rotation
+            posmatrix = np.array([sim.particles[i].x, sim.particles[i].y, sim.particles[i].z])
+            velmatrix = np.array([sim.particles[i].vx, sim.particles[i].vy, sim.particles[i].vz])
+            rotated_position = rotate_x(posmatrix, angle)
+            rotated_velocity = rotate_x(velmatrix,angle)
+            rotatedLoS.append(rotated_velocity)
+            coordinates.append(rotated_position)
+        for i in range(1): # Kick rotation
+            kickmatrix = np.array([KVX,KVY,KVZ])
+            rotated_kick = rotate_x(kickmatrix,angle)
+        LoS = [ x[2] for x in rotatedLoS]
+        LoS = np.array(LoS) 
+
+
+
+    # Determine bin range----------------------------------------------------------
+
+    numbin = 100
+
+    #if abs(LoS.max())> abs(LoS.min()):
+    #    binsmax = LoS.max() 
+    #    binsmin = -LoS.max()
+    #if abs(LoS.max())< abs(LoS.min()):
+    #    binsmax = -LoS.min()
+    #    binsmin = LoS.min()
+
+    #bin_width = (binsmax - binsmin) / numbin
+
+
+    # Total Luminosity in each bin-------------------------------------------------
+
+    zeros = pd.DataFrame([0])
+    Lvals = pd.concat([Lcl1,Lcl2], axis = 1)
+    Lval = Lvals['Lcl1'] + Lvals['Lcl2']
+    Lval = pd.concat([zeros, Lval])
+
+    LoS = np.array(LoS)
+    Lval = np.ravel(Lval)
+
+    Lsum, sortedV, Bin = stats.binned_statistic_dd(LoS, Lval, statistic='sum', bins = numbin)    
+
+    sortedV = np.array(sortedV)
+    sortedV = np.swapaxes(sortedV,0,1)
+    sortedV = sortedV[:-1]
+
+    # Plot-------------------------------------------------------------------------
+
+    fig, ax = plt.subplots(figsize=(15, 8), dpi = 200)
+
+    
+    ax.plot(sortedV,Lsum)
+    ax.set_title('Simulated Spectra\nTime Passed:'+str(f"{sim.t:.3e}"+' seconds'), fontsize = 20)
+    ax.set_ylabel('Total Luminosity (ergs/s)', fontsize = 15)
+    ax.set_xlabel('Line of Sight Velocity (cm/s) - '+ str(numbin)+ ' Velocity Bins ', fontsize = 15)
+
+    ax.spines['top'].set_visible(False)
+    ax.spines['right'].set_visible(False)
+
+    ax.axvline(x=0, color = 'red', linestyle = '--', alpha = 0.5)
+
+    xabs_max = abs(max(ax.get_xlim(), key=abs))
+    ax.set_xlim(xmin=-xabs_max, xmax=xabs_max)
+    
