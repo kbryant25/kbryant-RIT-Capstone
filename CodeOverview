@@ -155,9 +155,8 @@ ffor i in range(Nimg):
 Reads the simulation data from the binary file and splits it into individual timestep CSVs. The TimestepData folder will contain all of the data needed to calculate the luminosity for each individual timestep in its own CSV file. 
 
 
-#%% Luminosity calculations and Spectra generation-----------------------------
+#%% Combined Plot--------------------------------------------------------------
 
-In this mess of nested for loops the code is looping through each timestep and calculating all of the values for things like: cloud radial distance from center, Keplerian velocity, individual cloud radius, and gas density. Once we have those values we can determine the ionization state of each individual cloud and whether or not it is matter-bounded or radiation-bounded. From there that determines how we calculate the luminosity of that individual cloud. 
+Calculates cloud properties to allow for creation of spectra plots and plots saved timesteps from the simulation onto 1 plot
 
-Once we have individual cloud luminosity the code will automatically sort each cloud into a velocity bin based on its line of sight velocity to the observer and sum up the total lumiosity in each bin, creating our spectrum for that timestep.
 
