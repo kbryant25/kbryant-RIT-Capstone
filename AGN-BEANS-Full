@@ -1,0 +1,856 @@
+#%%
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+"""
+Created on Fri Oct 18 21:17:46 2024
+
+@author: Karina Bryant
+
+Current python version: 3.12.4
+"""
+
+# Standard library
+import glob
+import os
+import re
+import sys
+
+# Third-party
+import matplotlib.cm as cm
+import matplotlib.pyplot as plt
+import numpy as np
+import pandas as pd
+import rebound
+
+from scipy import stats
+from astropy.convolution import Gaussian1DKernel, convolve
+
+
+# =============================================================================
+# USER PARAMETERS
+# =============================================================================
+# 
+# '''Code units are in cgs'''
+
+
+BHM = 5e8                    # Black hole mass in solar masses
+KVZ = 2121.5e5               # Kick velocity cm / s
+KVX = 2121.5e5
+KVY = 0
+RS = None                        # Set seed for repeatability
+N_testparticle = 10000          # Number of test particles
+Nimg = 1501                    # Number of frames 
+timesteps = [0, 5, 10, 15, 20, 30, 40, 50, 75, 100, 150, 200, 500, 1000, 1500]    # What timestep to print as profiles
+ObsInc = [0] # Inclination of observer to generate profiles using
+
+
+Y = 20                         # Size scaled to BLR
+Tsub = 1500                    # Dust sublimation temperature
+Eratio = 0.1                   # Eddington ratio
+sigma = 1                      # Angular width
+p = 0                          # Cloud distribution power law 0 for uniform distribution
+c =  2.998e10                  # cm/s
+s =  0                         # Gas density distribution 0 - constant density -2 - 1/r^2 dropoff
+n0 = 10**9
+
+# =============================================================================
+# CALCULATED PARAMETERS
+# =============================================================================
+
+BHMg = BHM * 1.989e+33              # Solar mass to g
+SwR = ((2*BHMg*(6.67e-8))/(c**2))   # Schwarzschild Radius (cm)
+LEdd = 1.26e38*(BHMg/1.989e33)
+LAGN = Eratio*LEdd                  # Bolometric luminosity erg s**-1  Sum of all clouds should be around 10**40
+Rd = (0.4*((((LAGN)/(10**45))**0.5)*((1500/Tsub)**2.6)))* 3.086e+18 # Dust sublimation radius
+qagnratio = 2.6e55/10e45            # Base ratio of ionizing photon luminosity to AGN luminosity
+Q = qagnratio*LAGN                  # Ionizing photon luminosity photons/s
+alpha = (p-2)-2*(s/3)
+incval = np.pi/6                    # Disk inclination
+Cf = 0.3/np.sin(incval)             # Covering fraction for flared disk
+
+
+if alpha == -1:
+    print("Value for alpha cannot be equal to -1. Check parameters")
+    sys.exit(1)
+
+# =============================================================================
+# CONSTANTS
+# =============================================================================
+
+alphaeff = 1.1e-13              # Effective recombination coefficient for Halpha cm^3*s^-1
+alphaB = 2.6e-13                # Recombination coefficient for hydrogen cm^3*s^-1
+h = 6.62607015e-27 
+EffRecomb = 1.1e13            # cm^3 s^−1
+nu = (c)/(656e-7)
+
+# =============================================================================
+# FILE MANAGMENT
+# =============================================================================
+
+plt.ioff() #Tells IDE to only save the plots and not display them for speed
+
+# Removes previous files so the data is replaced if needed and sets up file path 
+
+def delete_files_in_directory(directory_path):
+   try:
+     files = glob.glob(os.path.join(directory_path, '*'))
+     for file in files:
+       if os.path.isfile(file):
+         os.remove(file)
+     print("All files deleted successfully.")
+   except OSError:
+     print("Error occurred while deleting files.")
+
+BASE_DIR = "/***BaseFIlePath***"
+
+ANIMATION_DIR = os.path.join(BASE_DIR, "AnimationFolder")
+RAW_DATA_DIR = os.path.join(BASE_DIR, "RawData")
+TIMESTEP_DIR = os.path.join(BASE_DIR, "TimestepData")
+SPECTRA_DIR = os.path.join(TIMESTEP_DIR, "ProcessedSpectra")
+
+
+delete_files_in_directory(ANIMATION_DIR)
+delete_files_in_directory(RAW_DATA_DIR)
+delete_files_in_directory(TIMESTEP_DIR)
+delete_files_in_directory(SPECTRA_DIR)
+
+
+# =============================================================================
+# SIMULATION 
+# =============================================================================
+
+"""Set up the particles in the simulation. Particles are added by default in
+Jacobi coordinates (center-of-mass frame)"""
+
+sim = rebound.Simulation()    # Initialize the simulation
+sim.units = ('s', 'cm', 'g')  # Set simulation units
+sim.ri_ias15.min_dt = 10000   # Set minimum timestep length in seconds
+sim.add(m = BHMg)             # Add the central particle
+primary=sim.particles[0]
+np.random.seed(42)            # Random seed for test cases
+
+
+# Set up initial distribution of test particles 
+
+a_initial = np.linspace(Rd/Y, Rd, N_testparticle) # Initial range of semi major axis to distribute particles
+'''Range determined by the dust sublimation radius and the size scaled to BLR'''
+
+for a in a_initial:
+    sim.add(a=a,
+            inc = np.random.uniform(low = -incval, high = incval), # Inclination
+            #inc = 0,
+            Omega = np.random.uniform(high = np.pi),         # Longitude of ascending node
+            #Omega = 0,
+            f=np.random.rand()*2.*np.pi) # Mass is set to 0 by default, random true anomaly
+
+
+# Print parameters for easy copy-pasting
+
+print('Recoil z velocity in cm/s: ' + str(KVZ))
+print('Recoil x velocity in cm/s: ' + str(KVX))
+print('Recoil y velocity in cm/s: ' + str(KVY))
+print('BH Mass: ' + str(BHM))
+print('Number of test Particles: ' + str(N_testparticle))
+print('Random seed: ' + str(RS))
+print('Number of frames to generate: ' + str(Nimg))
+print('Inner Radius: '+ str(Rd/Y))
+print('Outer Radius: '+ str(Rd))
+print('Schwarzschild Radius: '+ str(SwR))
+print('AGN Luminosity: '+ str(LAGN))
+print('Ionizing Photon Luminosity: '+str(Q))
+print('Eddington Ratio: '+str(Eratio))
+print('Dust Sublimation Temperature: '+str(Tsub)) 
+
+#%% # =============================================================================
+# INTEGRATION
+# =================================================================================
+
+for i in range(Nimg):
+    if i == 0:
+        # Print the base simulation before any modification
+        coords = np.zeros((sim.N, 6))
+        sim.serialize_particle_data(xyzvxvyvz=coords)
+        fig, ([ax1, ax2], [ax3, ax4]) = plt.subplots(2, 2, figsize=(12, 10), dpi=200)
+
+        # XY graph
+        ax1 = plt.subplot(2, 2, 3)
+        vz = coords[:, 5]
+        scatterxy = plt.scatter(coords[:, 0], coords[:, 1], c=vz, cmap='coolwarm_r', s=2.5)
+        plt.colorbar(scatterxy, label='Z-Velocity')
+        plt.scatter(coords[:, 0][0], coords[:, 1][0], marker='x', c='k', s=50)
+        ax1.set_title("XY")
+        ax1.set_xlabel('Distance in cm')
+
+        # YZ graph
+        ax2 = plt.subplot(2, 2, 4)
+        vx = coords[:, 3]
+        scatteryz = plt.scatter(coords[:, 2], coords[:, 1], c=vx, cmap='coolwarm', s=2.5)
+        plt.colorbar(scatteryz, label='X-Velocity')
+        plt.scatter(coords[:, 2][0], coords[:, 1][0], marker='*', c='m', s=75)
+        plt.yticks(color='w')
+        ax2.set_title("YZ")
+        ax2.set_xlabel('Distance in cm')
+
+        # XZ graph
+        ax3 = plt.subplot(2, 2, 1)
+        vy = coords[:, 4]
+        scatterxz = plt.scatter(coords[:, 0], coords[:, 2], c=vy, cmap='coolwarm', s=2.5)
+        plt.colorbar(scatterxz, label='Y-Velocity')
+        plt.scatter(coords[:, 0][0], coords[:, 2][0], marker='*', c='m', s=75)
+        plt.xticks(color='w')
+        ax3.set_title("XZ")
+        ax3.set_ylabel('Distance in cm')
+
+        # Empty space
+        ax4 = plt.subplot(2, 2, 2)
+        plt.scatter(0, 0, alpha=0)
+        plt.axis('off')
+        plt.tick_params(left=False, right=False, labelleft=False, labelbottom=False, bottom=False)
+        ax4.set_title(
+            "SMBH Recoil\nInitial Z velocity (cm/s): " + str(KVZ)
+            + "\nInitial X velocity (cm/s): " + str(KVX)
+            + "\nInitial Y velocity (cm/s): " + str(KVY)
+            + '\nTimestep: ' + str(sim.t) + ' seconds',
+            fontsize=13
+        )
+        sim.step()
+
+    else:
+        # Add velocity kick
+        sim.particles[0].vz = -KVZ
+        sim.particles[0].vx = KVX
+        sim.particles[0].vy = KVY
+        sim.step()
+
+        coords = np.zeros((sim.N, 6))
+        sim.serialize_particle_data(xyzvxvyvz=coords)
+        fig, ([ax1, ax2], [ax3, ax4]) = plt.subplots(2, 2, figsize=(12, 10), dpi=200)
+
+        # XY graph
+        ax1 = plt.subplot(2, 2, 3)
+        vz = coords[:, 5]
+        scatterxy = plt.scatter(coords[:, 0], coords[:, 1], c=vz, cmap='coolwarm_r', s=2.5)
+        plt.colorbar(scatterxy, label='Z-Velocity')
+        plt.scatter(coords[:, 0][0], coords[:, 1][0], marker='x', c='black', s=50)
+        ax1.set_title("XY")
+        ax1.set_xlabel('Distance in cm')
+
+        # YZ graph
+        ax2 = plt.subplot(2, 2, 4)
+        vx = coords[:, 3]
+        scatteryz = plt.scatter(coords[:, 2], coords[:, 1], c=vx, cmap='coolwarm', s=2.5)
+        plt.colorbar(scatteryz, label='X-Velocity')
+        plt.scatter(0, 0, marker='+', color='k', s=75)
+        plt.scatter(coords[:, 2][0], coords[:, 1][0], marker='*', c='m', s=75)
+        plt.yticks(color='w')
+        ax2.set_title("YZ")
+        ax2.set_xlabel('Distance in cm')
+
+        # XZ graph
+        ax3 = plt.subplot(2, 2, 1)
+        vy = coords[:, 4]
+        scatterxz = plt.scatter(coords[:, 0], coords[:, 2], c=vy, cmap='coolwarm', s=2.5)
+        plt.colorbar(scatterxz, label='Y-Velocity')
+        plt.scatter(0, 0, marker='+', color='k', s=75)
+        plt.scatter(coords[:, 0][0], coords[:, 2][0], marker='*', c='m', s=75)
+        plt.xticks(color='w')
+        ax3.set_title("XZ")
+        ax3.set_ylabel('Distance in cm')
+
+        # Empty space
+        ax4 = plt.subplot(2, 2, 2)
+        plt.scatter(0, 0, alpha=0)
+        plt.axis('off')
+        plt.tick_params(left=False, right=False, labelleft=False, labelbottom=False, bottom=False)
+        ax4.set_title(
+            "SMBH Recoil\nInitial Z velocity (cm/s): " + str(KVZ)
+            + "\nInitial X velocity (cm/s): " + str(KVX)
+            + "\nInitial Y velocity (cm/s): " + str(KVY)
+            + '\nTimestep: ' + str(f"{sim.t:.3e}") + ' seconds',
+            fontsize=13
+        )
+
+    if i in timesteps:
+        plt.savefig(os.path.join(ANIMATION_DIR, f"image_{i}.jpg"))
+        sim.save_to_file(os.path.join(RAW_DATA_DIR, "archive.bin"))
+    plt.close()
+
+
+#%%# =============================================================================
+# DATA EXTRACTION
+# ================================================================================
+
+
+# Initialize Simulationarchive simulation
+
+sa = rebound.Simulationarchive(os.path.join(RAW_DATA_DIR, "archive.bin"))
+N_archives = len(sa)
+
+
+# Initialize empty data arrays
+
+
+save_times = np.zeros(N_archives)
+# 2 dimensional array of size N saves and M particles
+particles_x = np.zeros((N_archives, (N_testparticle + 1))) 
+particles_y = np.zeros((N_archives, (N_testparticle + 1)))
+particles_z = np.zeros((N_archives, (N_testparticle + 1)))
+particles_vx = np.zeros((N_archives, (N_testparticle + 1)))
+particles_vy = np.zeros((N_archives, (N_testparticle + 1)))
+particles_vz = np.zeros((N_archives, (N_testparticle + 1)))
+
+
+# Now loop through and pull out all of the values of interest
+
+for i, sim in enumerate(sa):
+    save_times[i] = sim.t
+    for j in range(1, sim.N):
+        particles_x[i, j] = sim.particles[j].x
+        particles_y[i, j] = sim.particles[j].y
+        particles_z[i, j] = sim.particles[j].z
+        particles_vx[i, j] = sim.particles[j].vx
+        particles_vy[i, j] = sim.particles[j].vy
+        particles_vz[i, j] = sim.particles[j].vz 
+
+
+# Save each individual parameter to its own CSV
+
+x_data = np.concatenate([[save_times], particles_x.T])
+np.savetxt(os.path.join(RAW_DATA_DIR, 'simXdata.csv'),
+            x_data, delimiter=', ')
+
+vx_data = np.concatenate([[save_times], particles_vx.T])
+np.savetxt(os.path.join(RAW_DATA_DIR, 'simVXdata.csv'),
+            vx_data, delimiter=', ')
+
+y_data = np.concatenate([[save_times], particles_y.T])
+np.savetxt(os.path.join(RAW_DATA_DIR, 'simYdata.csv'),
+            y_data, delimiter=', ')
+
+vy_data = np.concatenate([[save_times], particles_vy.T])
+np.savetxt(os.path.join(RAW_DATA_DIR, 'simVYdata.csv'),
+            vy_data, delimiter=', ')
+
+z_data = np.concatenate([[save_times], particles_z.T])
+np.savetxt(os.path.join(RAW_DATA_DIR, 'simZdata.csv'),
+            z_data, delimiter=', ')
+
+vz_data = np.concatenate([[save_times], particles_vz.T])
+np.savetxt(os.path.join(RAW_DATA_DIR, 'simVZdata.csv'),
+            vz_data, delimiter=', ')
+
+
+# Read CSV files into dataframes
+
+x = pd.read_csv(os.path.join(RAW_DATA_DIR, 'simXdata.csv'))
+y = pd.read_csv(os.path.join(RAW_DATA_DIR, 'simYdata.csv'))
+z = pd.read_csv(os.path.join(RAW_DATA_DIR, 'simZdata.csv'))
+vx = pd.read_csv(os.path.join(RAW_DATA_DIR, 'simVXdata.csv'))
+vy = pd.read_csv(os.path.join(RAW_DATA_DIR, 'simVYdata.csv'))
+vz = pd.read_csv(os.path.join(RAW_DATA_DIR, 'simVZdata.csv'))
+
+
+# Split CSVs into individual timestep CSVs
+
+var_list = ['X', 'Y', 'Z', 'Vx', 'Vy', 'Vz']     # Column titles
+t_step = np.arange(len(sa))                      # Number of files it needs to make - Matches with # of images
+df_list = [x, y, z, vx, vy, vz]                  # List of dataframes
+t_dict = {}
+for i, t in enumerate(t_step):                   # Loop through each column in each parameter csv
+    temp_df = pd.DataFrame()
+    for j, df in enumerate(df_list):
+        var = var_list[j]
+        temp_df[var] = df.iloc[0:, t]
+    temp_df.to_csv(os.path.join(TIMESTEP_DIR, f't{t}.csv'))
+    
+
+#%% # =============================================================================
+# MULTI-PLOT
+# ================================================================================
+
+
+plt.ion() 
+np.random.seed(42)            # Random seed for test cases
+
+# Generating Profiles
+
+ObsInc = [0]
+LofT = []
+
+halphaphoton = nu*h
+
+
+for inc in (ObsInc):
+    for i,step in enumerate(timesteps):
+        sim = sa[timesteps[i]]
+
+        # Read timestep data
+
+        xStep = pd.read_csv(os.path.join(TIMESTEP_DIR, f't{timesteps[i]}.csv'), usecols = ['X'])
+        xStep = xStep['X'].tolist()
+
+        yStep = pd.read_csv(os.path.join(TIMESTEP_DIR, f't{timesteps[i]}.csv'), usecols = ['Y'])
+        yStep = yStep['Y'].tolist()
+
+        zStep = pd.read_csv(os.path.join(TIMESTEP_DIR, f't{timesteps[i]}.csv'), usecols = ['Z'])
+        zStep = zStep['Z'].tolist()
+
+        vxStep = pd.read_csv(os.path.join(TIMESTEP_DIR, f't{timesteps[i]}.csv'), usecols = ['Vx'])
+        vxStep = vxStep['Vx'].tolist()
+
+        vyStep = pd.read_csv(os.path.join(TIMESTEP_DIR, f't{timesteps[i]}.csv'), usecols = ['Vy'])
+        vyStep = vyStep['Vy'].tolist()
+
+        vzStep = pd.read_csv(os.path.join(TIMESTEP_DIR, f't{timesteps[i]}.csv'), usecols = ['Vz'])
+        vzStep = vzStep['Vz'].tolist()
+
+
+
+        ncd = (N_testparticle*(p+1))/(4*np.pi*(Rd**3)*(1-(Y**-(p+1)))) # 
+        Rcld = ((Cf*((alpha+1)/(np.pi*ncd*Rd))*(1/(1-Y**(-(alpha+1))))))**0.5 # Cloud radius at dust sublimation radius
+ 
+
+        # Cloud radial distance from center, Keplerian velocity, individual cloud radius, and gas density---------------------
+
+        Vkep = []
+        dist = []
+        nr = []        
+        Rcl = []
+        r = []
+        for i in range(N_testparticle+1):
+            r = (np.sqrt(((sim.particles[0].x-sim.particles[i].x)**2)+((sim.particles[0].y-sim.particles[i].y)**2)+((sim.particles[0].z-sim.particles[i].z)**2)))
+            dist.append(r)
+            with np.errstate(divide='ignore'):
+                kep = np.sqrt((6.67259e-8*BHMg)/r)
+                Vkep.append(kep)
+            Rcloud = Rcld*(r/Rd)**(-s/3)
+            nccloud = n0*(r/Rd)**s
+            Rcl.append(Rcloud)
+            nr.append(nccloud)
+        nr.pop(0)
+        Rcl.pop(0)   
+        Vkep.pop(0)
+        dist.remove(0)
+
+
+
+        # Ionization state of the cloud
+
+        Urt = []
+        for i in range(N_testparticle):
+            U = (Q/(4*np.pi*((dist[i])**2)*c*nr[i]))
+            Urt.append(U)
+    
+        Urt = np.array(Urt)
+
+
+        # Radiation vs Matter-bounded cloud
+
+        Lcl1 = np.zeros(N_testparticle) 
+        Lcl2 = np.zeros(N_testparticle) 
+        dc = np.zeros(N_testparticle)
+        ds = np.zeros(N_testparticle)
+
+        for i in range(N_testparticle):
+            dc[i] = Rcl[i]
+            ds[i] = ((c*Urt[i])/(alphaB*nr[i]))
+
+
+        # Individual cloud luminosity
+
+        for i in range(N_testparticle):
+            if ds[i]<dc[i]:
+                Lcl1[i] = nr[i]**2*(alphaeff)*h*(nu)*np.pi*(Rcl[i]**2)*ds[i] # For ds<dc Radiation bounded
+            else:
+                Lcl2[i] = nr[i]**2*(alphaeff)*h*(nu)*np.pi*(Rcl[i]**2)*Rcl[i] # Matter bounded
+
+        print('Total Cloud luminosity for timestep', ':', sum(Lcl1+Lcl2))
+
+
+        # Belpro output for given timestep
+
+        Urt = pd.DataFrame(Urt, columns = ['U'])
+        Rcl = pd.DataFrame(Rcl, columns = ['Rcl'])
+        nr = pd.DataFrame(nr, columns = ['hden'])
+        #Nc = pd.DataFrame(nc, columns = ['Nc'])
+        Lcl1 = pd.DataFrame(Lcl1, columns = ['Lcl1'])
+        Lcl2 = pd.DataFrame(Lcl2, columns = ['Lcl2'])
+
+        # Line of sight velocity
+
+        if inc == 0:
+            LoS = vzStep
+
+        if inc == 90:
+            LoS = vyStep
+
+
+        def rotation_matrix_x(theta):
+            """
+            Returns a rotation matrix for rotation about the x-axis.
+            """
+            return np.array([
+                [1, 0, 0],
+                [0, np.cos(theta), -np.sin(theta)],
+                [0, np.sin(theta),  np.cos(theta)]
+            ])
+
+
+        theta = inc*(np.pi/180)
+
+        if 0 < inc < 90:
+            angle = theta
+            rotatedLoS = []
+            coordinates = []
+            rotatedKick = []
+            for i in range(N_testparticle+1): # Particle rotation
+                posmatrix = np.array([sim.particles[i].x, sim.particles[i].y, sim.particles[i].z])
+                velmatrix = np.array([sim.particles[i].vx, sim.particles[i].vy, sim.particles[i].vz])
+                rotated_position = rotation_matrix_x(posmatrix, angle)
+                rotated_velocity = rotation_matrix_x(velmatrix,angle)
+                rotatedLoS.append(rotated_velocity)
+                coordinates.append(rotated_position)
+            for i in range(1): # Kick rotation
+                kickmatrix = np.array([KVX,KVY,-KVZ])
+                rotated_kick = rotation_matrix_x(kickmatrix,angle)
+            LoS = [ x[2] for x in rotatedLoS]
+            LoS = np.array(LoS) 
+
+        numbin = 10
+
+        # Total Luminosity in each bin
+
+        zeros = pd.DataFrame([0])
+        Lvals = pd.concat([Lcl1,Lcl2], axis = 1)
+        Lval = Lvals['Lcl1'] + Lvals['Lcl2']
+        Lval = pd.concat([zeros, Lval])
+
+        LoS = np.array(LoS)
+        Lval = np.ravel(Lval)
+
+        Lsum, sortedV, Bin = stats.binned_statistic_dd(LoS, Lval, statistic='sum', bins = numbin)    
+
+        sortedV = np.array(sortedV)
+        sortedV = np.swapaxes(sortedV,0,1)
+        sortedV = sortedV[:-1]
+
+        g = Gaussian1DKernel(stddev=1)
+        Lsum = convolve(Lsum,g)
+
+        # Plot
+
+        fig, ax = plt.subplots(figsize=(15, 8), dpi = 200)
+
+        vkick = np.sqrt(KVZ*KVZ+KVY*KVY+KVX*KVX)
+        angle = np.arctan((np.sqrt(KVX*KVX+KVY*KVY))/KVZ)
+        angle = np.round(angle*57.2958)
+
+        
+        ax.plot(sortedV,Lsum)
+
+        # Detailed Title
+        #ax.set_title('Simulated Spectra\nTime Passed: '+str(f"{sim.t:.3e}"+' seconds'+ " - Observer Inclination: "+str(inc)+"\nKick Velocity: "+ str(f"{vkick:.0e}")+" cm/s") + " - Kick Angle: "+str(angle)+" degrees - BH Mass: "+str(f"{BHM:.0e}"), fontsize = 20)
+        
+        # Simplified Title
+        ax.set_title('Simulated Spectra\nTime Passed: '+str(f"{sim.t:.3e}")+' seconds', fontsize = 20)
+        
+        ax.set_ylabel('Total Luminosity (ergs/s)', fontsize = 15)
+        ax.set_xlabel('Line of Sight Velocity (cm/s) - '+ str(numbin)+ ' Velocity Bins ', fontsize = 15)
+
+        ax.spines['top'].set_visible(False)
+        ax.spines['right'].set_visible(False)
+
+        ax.axvline(x=0, color = 'red', linestyle = '--', alpha = 0.5)
+        filename = (f"profile_M{BHM:.1e}_V{f"{vkick:.0e}"}_A{angle}_"f"I{inc}_T{step}") 
+        #plt.savefig(os.path.join(directory_path1, f'{filename}.jpg'), dpi=300, bbox_inches='tight') 
+
+        # Luminosity over time
+        Lt = Lcl1.sum().values[0] + Lcl2.sum().values[0]
+        LofT.append((sim.t, Lt))
+
+
+# Percentage of particles with keplarian velocity below kick i.e. the ones that will be left behind
+
+
+escaped = []
+for i in Vkep:
+    if i < vkick:
+        escaped.append(i)
+
+fraction = (len(escaped)/N_testparticle)*100    
+print("Fraction: " + str(fraction))
+
+#%%# =============================================================================
+# COMBINED PLOT
+# ================================================================================
+
+
+import glob
+import re
+
+ObsInc = [0, 57]
+LofT = []
+halphaphoton = nu * h
+numbin = 40  
+
+def compute_global_velocity_ranges(timestep_info, sa, ObsInc, N_testparticle):
+    """
+    Computes global min/max LoS velocity for each inclination
+    across ALL timesteps, then expands by 10%.
+    """
+    vel_ranges = {}
+
+    for inc in ObsInc:
+        theta = np.deg2rad(inc)
+
+        global_min = np.inf
+        global_max = -np.inf
+
+        for step, csv_path in timestep_info:
+            if step >= len(sa):
+                continue
+
+            sim = sa[step]
+
+            LoS = []
+            for k in range(1, N_testparticle + 1):
+                vel = np.array([
+                    sim.particles[k].vx,
+                    sim.particles[k].vy,
+                    sim.particles[k].vz
+                ])
+
+                rotation_matrix = np.array([
+                    [1, 0, 0],
+                    [0, np.cos(theta), -np.sin(theta)],
+                    [0, np.sin(theta),  np.cos(theta)]
+                ])
+
+                rotated = rotation_matrix @ vel
+                LoS.append(rotated[2])
+
+            LoS = np.array(LoS)
+
+            if LoS.size == 0:
+                continue
+
+            global_min = min(global_min, LoS.min())
+            global_max = max(global_max, LoS.max())
+
+        global_min = min(global_min, 0)
+        global_max = max(global_max, 0)
+
+        padding = 0.1 * (global_max - global_min)
+
+        vel_ranges[inc] = (
+            global_min - padding,
+            global_max + padding
+        )
+
+    return vel_ranges
+
+# Automatically Detect Timestep Files 
+
+base_path = TIMESTEP_DIR
+file_pattern = os.path.join(base_path, "t*.csv")
+
+csv_files = glob.glob(file_pattern)
+
+timestep_info = []
+for file in csv_files:
+    match = re.search(r't(\d+)\.csv', os.path.basename(file))
+    if match:
+        step_number = int(match.group(1))
+        timestep_info.append((step_number, file))
+
+timestep_info.sort(key=lambda x: x[0])
+
+print(f"Detected {len(timestep_info)} timestep files.")
+
+vel_ranges = compute_global_velocity_ranges(
+    timestep_info, sa, ObsInc, N_testparticle
+)
+
+# Plot Setup 
+
+fig, axes = plt.subplots(
+    nrows=len(ObsInc),
+    ncols=1,
+    figsize=(15, 6 * len(ObsInc)),
+    dpi=200,
+    sharex=True
+)
+
+if len(ObsInc) == 1:
+    axes = [axes]
+
+colors = cm.viridis(np.linspace(0, 1, len(timestep_info)))
+
+# Main Loop Over Files 
+
+for step_index, (step, csv_path) in enumerate(timestep_info):
+
+    if step >= len(sa):
+        print(f"Skipping timestep {step} — archive index out of range.")
+        continue
+
+    sim = sa[step]
+
+    if not os.path.exists(csv_path):
+        print(f"Skipping {csv_path} (file not found)")
+        continue
+
+    df = pd.read_csv(csv_path)
+
+    # Remove central black hole (row 0)
+    df = df.iloc[1:].reset_index(drop=True)
+
+    xStep = df['X'].to_numpy()
+    yStep = df['Y'].to_numpy()
+    zStep = df['Z'].to_numpy()
+    vxStep = df['Vx'].to_numpy()
+    vyStep = df['Vy'].to_numpy()
+    vzStep = df['Vz'].to_numpy()
+
+    # Cloud Properties (compute ONCE per timestep) 
+
+    ncd = (N_testparticle * (p + 1)) / (4 * np.pi * (Rd**3) * (1 - (Y**-(p + 1))))
+    Rcld = ((Cf * ((alpha + 1) / (np.pi * ncd * Rd)) *
+             (1 / (1 - Y**(-(alpha + 1)))))) ** 0.5
+
+    dist, Rcl, nr = [], [], []
+
+    for k in range(N_testparticle + 1):
+        r = np.sqrt(
+            (sim.particles[0].x - sim.particles[k].x) ** 2 +
+            (sim.particles[0].y - sim.particles[k].y) ** 2 +
+            (sim.particles[0].z - sim.particles[k].z) ** 2
+        )
+        dist.append(r)
+        Rcloud = Rcld * (r / Rd) ** (-s / 3)
+        nccloud = n0 * (r / Rd) ** s
+        Rcl.append(Rcloud)
+        nr.append(nccloud)
+
+    dist = np.array(dist[1:])
+    Rcl = np.array(Rcl[1:])
+    nr = np.array(nr[1:])
+
+    # Ionization Parameter 
+
+    Urt = Q / (4 * np.pi * dist**2 * c * nr)
+
+    # Individual Cloud Luminosity 
+
+    dc = Rcl
+    ds = (c * Urt) / (alphaB * nr)
+
+    Lcl1 = np.where(ds < dc,
+                    (nr**2) * alphaeff * h * nu * np.pi * (Rcl**2) * ds,
+                    0.0)
+
+    Lcl2 = np.where(ds >= dc,
+                    (nr**2) * alphaeff * h * nu * np.pi * (Rcl**3),
+                    0.0)
+
+    Lvals = Lcl1 + Lcl2
+
+    print(f"Total Cloud luminosity for timestep {step}: {Lvals.sum()}")
+
+    if 'Luminosity' not in df.columns:
+        df['Luminosity'] = Lvals
+
+    spectrum_data = {"Velocity": None}
+    
+    # Loop Over Inclinations 
+
+    for j, inc in enumerate(ObsInc):
+        ax = axes[j]
+
+        theta = np.deg2rad(inc)
+
+        LoS = []
+
+        for k in range(1, N_testparticle + 1):  # skip BH
+            vel = np.array([
+                sim.particles[k].vx,
+                sim.particles[k].vy,
+                sim.particles[k].vz
+            ])
+
+            rotation_matrix = np.array([
+                [1, 0, 0],
+                [0, np.cos(theta), -np.sin(theta)],
+                [0, np.sin(theta),  np.cos(theta)]
+            ])
+
+            rotated = rotation_matrix @ vel
+            LoS.append(rotated[2])
+
+        LoS = np.array(LoS)
+
+    # Fixed Alignment 
+        LoS_aligned = LoS
+        Lvals_aligned = Lvals
+
+        # Plot spectrum 
+        Lsum, edges, binnumber = stats.binned_statistic(
+            LoS_aligned, Lvals_aligned, statistic="sum", bins=numbin, range = vel_ranges[inc]
+        )
+
+        sortedV = 0.5 * (edges[1:] + edges[:-1])
+        g = Gaussian1DKernel(stddev=0.5)
+        Lsum = convolve(Lsum, g)
+
+        ax.plot(sortedV, Lsum,
+                color=colors[step_index],
+                label=f"t = {sim.t:.2e} s")
+
+     # Save AFTER all inclinations added
+        # Store results instead of saving immediately
+        if spectrum_data["Velocity"] is None:
+            spectrum_data["Velocity"] = sortedV
+
+        spectrum_data[f"obsInc-{inc}"] = Lsum
+
+    # Save combined spectrum per timestep 
+
+    output_dir = SPECTRA_DIR
+    os.makedirs(output_dir, exist_ok=True)
+
+    output_df = pd.DataFrame(spectrum_data)
+
+    output_filename = f"t{step}.csv"
+    output_path = os.path.join(output_dir, output_filename)
+
+    output_df.to_csv(output_path, index=False)
+
+    print(f"Saved combined spectrum: {output_filename}")
+
+# Formatting 
+
+for j, inc in enumerate(ObsInc):
+    ax = axes[j]
+
+    vkick = np.sqrt(KVZ**2 + KVY**2 + KVX**2)
+    angle = np.arctan(np.sqrt(KVX**2 + KVY**2) / KVZ)
+    angle = np.round(angle * 57.2958)
+
+    ax.set_title(
+        f"Simulated Spectra - Inclination {inc}°\n"
+        f"Kick Velocity: {vkick:.0e} cm/s, "
+        f"Kick Angle: {angle}°, BH Mass: {BHM:.0e}",
+        fontsize=18
+    )
+
+    ax.set_ylabel("Total Luminosity (erg/s)", fontsize=14)
+    ax.spines['top'].set_visible(False)
+    ax.spines['right'].set_visible(False)
+    ax.axvline(x=0, color='red', linestyle='--', alpha=0.5)
+
+    if j == len(ObsInc) - 1:
+        ax.set_xlabel("Line of Sight Velocity (cm/s)", fontsize=14)
+
+axes[0].legend(fontsize=12, title="Timesteps", title_fontsize=11)
+plt.tight_layout()
+plt.show()
