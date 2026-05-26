@@ -364,226 +364,35 @@ for i, t in enumerate(t_step):                   # Loop through each column in e
     temp_df.to_csv(os.path.join(TIMESTEP_DIR, f't{t}.csv'))
     
 
-#%% # =============================================================================
-# MULTI-PLOT
-# ================================================================================
-
-
-plt.ion() 
-np.random.seed(42)            # Random seed for test cases
-
-# Generating Profiles
-
-ObsInc = [0]
-LofT = []
-
-halphaphoton = nu*h
-
-
-for inc in (ObsInc):
-    for i,step in enumerate(timesteps):
-        sim = sa[timesteps[i]]
-
-        # Read timestep data
-
-        xStep = pd.read_csv(os.path.join(TIMESTEP_DIR, f't{timesteps[i]}.csv'), usecols = ['X'])
-        xStep = xStep['X'].tolist()
-
-        yStep = pd.read_csv(os.path.join(TIMESTEP_DIR, f't{timesteps[i]}.csv'), usecols = ['Y'])
-        yStep = yStep['Y'].tolist()
-
-        zStep = pd.read_csv(os.path.join(TIMESTEP_DIR, f't{timesteps[i]}.csv'), usecols = ['Z'])
-        zStep = zStep['Z'].tolist()
-
-        vxStep = pd.read_csv(os.path.join(TIMESTEP_DIR, f't{timesteps[i]}.csv'), usecols = ['Vx'])
-        vxStep = vxStep['Vx'].tolist()
-
-        vyStep = pd.read_csv(os.path.join(TIMESTEP_DIR, f't{timesteps[i]}.csv'), usecols = ['Vy'])
-        vyStep = vyStep['Vy'].tolist()
-
-        vzStep = pd.read_csv(os.path.join(TIMESTEP_DIR, f't{timesteps[i]}.csv'), usecols = ['Vz'])
-        vzStep = vzStep['Vz'].tolist()
-
-
-
-        ncd = (N_testparticle*(p+1))/(4*np.pi*(Rd**3)*(1-(Y**-(p+1)))) # 
-        Rcld = ((Cf*((alpha+1)/(np.pi*ncd*Rd))*(1/(1-Y**(-(alpha+1))))))**0.5 # Cloud radius at dust sublimation radius
- 
-
-        # Cloud radial distance from center, Keplerian velocity, individual cloud radius, and gas density---------------------
-
-        Vkep = []
-        dist = []
-        nr = []        
-        Rcl = []
-        r = []
-        for i in range(N_testparticle+1):
-            r = (np.sqrt(((sim.particles[0].x-sim.particles[i].x)**2)+((sim.particles[0].y-sim.particles[i].y)**2)+((sim.particles[0].z-sim.particles[i].z)**2)))
-            dist.append(r)
-            with np.errstate(divide='ignore'):
-                kep = np.sqrt((6.67259e-8*BHMg)/r)
-                Vkep.append(kep)
-            Rcloud = Rcld*(r/Rd)**(-s/3)
-            nccloud = n0*(r/Rd)**s
-            Rcl.append(Rcloud)
-            nr.append(nccloud)
-        nr.pop(0)
-        Rcl.pop(0)   
-        Vkep.pop(0)
-        dist.remove(0)
-
-
-
-        # Ionization state of the cloud
-
-        Urt = []
-        for i in range(N_testparticle):
-            U = (Q/(4*np.pi*((dist[i])**2)*c*nr[i]))
-            Urt.append(U)
-    
-        Urt = np.array(Urt)
-
-
-        # Radiation vs Matter-bounded cloud
-
-        Lcl1 = np.zeros(N_testparticle) 
-        Lcl2 = np.zeros(N_testparticle) 
-        dc = np.zeros(N_testparticle)
-        ds = np.zeros(N_testparticle)
-
-        for i in range(N_testparticle):
-            dc[i] = Rcl[i]
-            ds[i] = ((c*Urt[i])/(alphaB*nr[i]))
-
-
-        # Individual cloud luminosity
-
-        for i in range(N_testparticle):
-            if ds[i]<dc[i]:
-                Lcl1[i] = nr[i]**2*(alphaeff)*h*(nu)*np.pi*(Rcl[i]**2)*ds[i] # For ds<dc Radiation bounded
-            else:
-                Lcl2[i] = nr[i]**2*(alphaeff)*h*(nu)*np.pi*(Rcl[i]**2)*Rcl[i] # Matter bounded
-
-        print('Total Cloud luminosity for timestep', ':', sum(Lcl1+Lcl2))
-
-
-        # Belpro output for given timestep
-
-        Urt = pd.DataFrame(Urt, columns = ['U'])
-        Rcl = pd.DataFrame(Rcl, columns = ['Rcl'])
-        nr = pd.DataFrame(nr, columns = ['hden'])
-        #Nc = pd.DataFrame(nc, columns = ['Nc'])
-        Lcl1 = pd.DataFrame(Lcl1, columns = ['Lcl1'])
-        Lcl2 = pd.DataFrame(Lcl2, columns = ['Lcl2'])
-
-        # Line of sight velocity
-
-        if inc == 0:
-            LoS = vzStep
-
-        if inc == 90:
-            LoS = vyStep
-
-
-        def rotation_matrix_x(theta):
-            """
-            Returns a rotation matrix for rotation about the x-axis.
-            """
-            return np.array([
-                [1, 0, 0],
-                [0, np.cos(theta), -np.sin(theta)],
-                [0, np.sin(theta),  np.cos(theta)]
-            ])
-
-
-        theta = inc*(np.pi/180)
-
-        if 0 < inc < 90:
-            angle = theta
-            rotatedLoS = []
-            coordinates = []
-            rotatedKick = []
-            for i in range(N_testparticle+1): # Particle rotation
-                posmatrix = np.array([sim.particles[i].x, sim.particles[i].y, sim.particles[i].z])
-                velmatrix = np.array([sim.particles[i].vx, sim.particles[i].vy, sim.particles[i].vz])
-                rotated_position = rotation_matrix_x(posmatrix, angle)
-                rotated_velocity = rotation_matrix_x(velmatrix,angle)
-                rotatedLoS.append(rotated_velocity)
-                coordinates.append(rotated_position)
-            for i in range(1): # Kick rotation
-                kickmatrix = np.array([KVX,KVY,-KVZ])
-                rotated_kick = rotation_matrix_x(kickmatrix,angle)
-            LoS = [ x[2] for x in rotatedLoS]
-            LoS = np.array(LoS) 
-
-        numbin = 10
-
-        # Total Luminosity in each bin
-
-        zeros = pd.DataFrame([0])
-        Lvals = pd.concat([Lcl1,Lcl2], axis = 1)
-        Lval = Lvals['Lcl1'] + Lvals['Lcl2']
-        Lval = pd.concat([zeros, Lval])
-
-        LoS = np.array(LoS)
-        Lval = np.ravel(Lval)
-
-        Lsum, sortedV, Bin = stats.binned_statistic_dd(LoS, Lval, statistic='sum', bins = numbin)    
-
-        sortedV = np.array(sortedV)
-        sortedV = np.swapaxes(sortedV,0,1)
-        sortedV = sortedV[:-1]
-
-        g = Gaussian1DKernel(stddev=1)
-        Lsum = convolve(Lsum,g)
-
-        # Plot
-
-        fig, ax = plt.subplots(figsize=(15, 8), dpi = 200)
-
-        vkick = np.sqrt(KVZ*KVZ+KVY*KVY+KVX*KVX)
-        angle = np.arctan((np.sqrt(KVX*KVX+KVY*KVY))/KVZ)
-        angle = np.round(angle*57.2958)
-
-        
-        ax.plot(sortedV,Lsum)
-
-        # Detailed Title
-        #ax.set_title('Simulated Spectra\nTime Passed: '+str(f"{sim.t:.3e}"+' seconds'+ " - Observer Inclination: "+str(inc)+"\nKick Velocity: "+ str(f"{vkick:.0e}")+" cm/s") + " - Kick Angle: "+str(angle)+" degrees - BH Mass: "+str(f"{BHM:.0e}"), fontsize = 20)
-        
-        # Simplified Title
-        ax.set_title('Simulated Spectra\nTime Passed: '+str(f"{sim.t:.3e}")+' seconds', fontsize = 20)
-        
-        ax.set_ylabel('Total Luminosity (ergs/s)', fontsize = 15)
-        ax.set_xlabel('Line of Sight Velocity (cm/s) - '+ str(numbin)+ ' Velocity Bins ', fontsize = 15)
-
-        ax.spines['top'].set_visible(False)
-        ax.spines['right'].set_visible(False)
-
-        ax.axvline(x=0, color = 'red', linestyle = '--', alpha = 0.5)
-        filename = (f"profile_M{BHM:.1e}_V{f"{vkick:.0e}"}_A{angle}_"f"I{inc}_T{step}") 
-        #plt.savefig(os.path.join(directory_path1, f'{filename}.jpg'), dpi=300, bbox_inches='tight') 
-
-        # Luminosity over time
-        Lt = Lcl1.sum().values[0] + Lcl2.sum().values[0]
-        LofT.append((sim.t, Lt))
-
-
-# Percentage of particles with keplarian velocity below kick i.e. the ones that will be left behind
-
-
-escaped = []
-for i in Vkep:
-    if i < vkick:
-        escaped.append(i)
-
-fraction = (len(escaped)/N_testparticle)*100    
-print("Fraction: " + str(fraction))
-
 #%%# =============================================================================
 # COMBINED PLOT
 # ================================================================================
 
+
+def compute_escape_fraction(sim, vkick):
+    """
+    Computes percentage of particles with Keplerian velocity
+    below the kick velocity.
+    """
+
+    Vkep = []
+
+    for i in range(1, N_testparticle + 1):
+
+        r = np.sqrt(
+            (sim.particles[0].x - sim.particles[i].x) ** 2 +
+            (sim.particles[0].y - sim.particles[i].y) ** 2 +
+            (sim.particles[0].z - sim.particles[i].z) ** 2
+        )
+
+        kep = np.sqrt((6.67259e-8 * BHMg) / r)
+        Vkep.append(kep)
+
+    escaped = [v for v in Vkep if v < vkick]
+
+    fraction = (len(escaped) / N_testparticle) * 100
+
+    return fraction
 
 import glob
 import re
@@ -835,6 +644,8 @@ for j, inc in enumerate(ObsInc):
     vkick = np.sqrt(KVZ**2 + KVY**2 + KVX**2)
     angle = np.arctan(np.sqrt(KVX**2 + KVY**2) / KVZ)
     angle = np.round(angle * 57.2958)
+    fraction = compute_escape_fraction(sa[-1], vkick)
+    print(f"Fraction: {fraction}")
 
     ax.set_title(
         f"Simulated Spectra - Inclination {inc}°\n"
