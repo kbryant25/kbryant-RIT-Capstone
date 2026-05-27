@@ -1,0 +1,16 @@
+For this project I use 3 sets of 3 different simulation parameters to create a matrix of 27 simulations.
+These parameters were chosen to represent the range of possible values that could influence the recoil.
+
+
+
+|          | 5x10^6            | 5x10^7           | 5x10^8            |
+| -------- | ----------------- | ---------------- | ----------------- |
+| 1k/13deg | [[1k_13deg_5e6]]  | [[1k_13deg_5e7]] | [[1k_13deg_5e8]]  |
+| 2k/13deg | [[2k_13deg_5e6]]  | [[2k_13deg_5e7]] | [[2k_13deg_5e8]]  |
+| 3k/13deg | [[3k_13deg_5e6]]  | [[3k_13deg_5e7]] | [[3k_13deg_5e8]]  |
+| 1k/45deg | [[1k_45deg_5e6]]  | [[1k_45deg_5e7]] | [[1k_45deg_5e8]]  |
+| 2k/45deg | [[2k_45deg_5e6]]  | [[2k_45deg_5e7]] | [[2k_45deg_5e8]]  |
+| 3k/45deg | [[3k_45deg_5e6]]  | [[3k_45deg_5e7]] | [[3k_45deg_5e8]]  |
+| 1k/0deg  | [[1k_90deg_5e6]]  | [[1k_90deg_5e7]] | [[1k_90deg_5e8]]  |
+| 2k/0deg  | [[2k_90deg_5e6]]  | [[2k_90deg_5e7]] | [[2k_90deg_5e8]]  |
+| 3k/0deg  | [[3k_90deg_5e6]]  | [[3k_90deg_5e7]] | [[3k_90deg_5e8]]  |
