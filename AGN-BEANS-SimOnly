@@ -1,0 +1,276 @@
+#%%
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+"""
+Created on Fri Oct 18 21:17:46 2024
+
+@author: Karina Bryant
+
+Current python version: 3.12.4
+"""
+
+# Standard library
+import glob
+import os
+import re
+import sys
+
+# Third-party
+import matplotlib.cm as cm
+import matplotlib.pyplot as plt
+import numpy as np
+import pandas as pd
+import rebound
+
+from scipy import stats
+from astropy.convolution import Gaussian1DKernel, convolve
+
+
+# =============================================================================
+# USER PARAMETERS
+# =============================================================================
+# 
+# '''Code units are in cgs'''
+
+
+BHM = 5e8                    # Black hole mass in solar masses
+KVZ = 2121.5e5               # Kick velocity cm / s
+KVX = 2121.5e5
+KVY = 0
+RS = None                        # Set seed for repeatability
+N_testparticle = 10000          # Number of test particles
+Nimg = 1501                    # Number of frames 
+timesteps = [0, 5, 10, 15, 20, 30, 40, 50, 75, 100, 150, 200, 500, 1000, 1500]    # What timestep to print as profiles
+ObsInc = [0] # Inclination of observer to generate profiles using
+
+
+Y = 20                         # Size scaled to BLR
+Tsub = 1500                    # Dust sublimation temperature
+Eratio = 0.1                   # Eddington ratio
+sigma = 1                      # Angular width
+p = 0                          # Cloud distribution power law 0 for uniform distribution
+c =  2.998e10                  # cm/s
+s =  0                         # Gas density distribution 0 - constant density -2 - 1/r^2 dropoff
+n0 = 10**9
+
+# =============================================================================
+# CALCULATED PARAMETERS
+# =============================================================================
+
+BHMg = BHM * 1.989e+33              # Solar mass to g
+SwR = ((2*BHMg*(6.67e-8))/(c**2))   # Schwarzschild Radius (cm)
+LEdd = 1.26e38*(BHMg/1.989e33)
+LAGN = Eratio*LEdd                  # Bolometric luminosity erg s**-1  Sum of all clouds should be around 10**40
+Rd = (0.4*((((LAGN)/(10**45))**0.5)*((1500/Tsub)**2.6)))* 3.086e+18 # Dust sublimation radius
+qagnratio = 2.6e55/10e45            # Base ratio of ionizing photon luminosity to AGN luminosity
+Q = qagnratio*LAGN                  # Ionizing photon luminosity photons/s
+alpha = (p-2)-2*(s/3)
+incval = np.pi/6                    # Disk inclination
+Cf = 0.3/np.sin(incval)             # Covering fraction for flared disk
+
+
+if alpha == -1:
+    print("Value for alpha cannot be equal to -1. Check parameters")
+    sys.exit(1)
+
+# =============================================================================
+# CONSTANTS
+# =============================================================================
+
+alphaeff = 1.1e-13              # Effective recombination coefficient for Halpha cm^3*s^-1
+alphaB = 2.6e-13                # Recombination coefficient for hydrogen cm^3*s^-1
+h = 6.62607015e-27 
+EffRecomb = 1.1e13            # cm^3 s^−1
+nu = (c)/(656e-7)
+
+# =============================================================================
+# FILE MANAGMENT
+# =============================================================================
+
+plt.ioff() #Tells IDE to only save the plots and not display them for speed
+
+# Removes previous files so the data is replaced if needed and sets up file path 
+
+def delete_files_in_directory(directory_path):
+   try:
+     files = glob.glob(os.path.join(directory_path, '*'))
+     for file in files:
+       if os.path.isfile(file):
+         os.remove(file)
+     print("All files deleted successfully.")
+   except OSError:
+     print("Error occurred while deleting files.")
+
+BASE_DIR = "/Users/karina/Desktop/Python/Capstone/TestingEnvironment"
+
+ANIMATION_DIR = os.path.join(BASE_DIR, "AnimationFolder")
+RAW_DATA_DIR = os.path.join(BASE_DIR, "RawData")
+TIMESTEP_DIR = os.path.join(BASE_DIR, "TimestepData")
+SPECTRA_DIR = os.path.join(TIMESTEP_DIR, "ProcessedSpectra")
+
+
+delete_files_in_directory(ANIMATION_DIR)
+delete_files_in_directory(RAW_DATA_DIR)
+delete_files_in_directory(TIMESTEP_DIR)
+delete_files_in_directory(SPECTRA_DIR)
+
+
+# =============================================================================
+# SIMULATION 
+# =============================================================================
+
+"""Set up the particles in the simulation. Particles are added by default in
+Jacobi coordinates (center-of-mass frame)"""
+
+sim = rebound.Simulation()    # Initialize the simulation
+sim.units = ('s', 'cm', 'g')  # Set simulation units
+sim.ri_ias15.min_dt = 10000   # Set minimum timestep length in seconds
+sim.add(m = BHMg)             # Add the central particle
+primary=sim.particles[0]
+np.random.seed(42)            # Random seed for test cases
+
+
+# Set up initial distribution of test particles 
+
+a_initial = np.linspace(Rd/Y, Rd, N_testparticle) # Initial range of semi major axis to distribute particles
+'''Range determined by the dust sublimation radius and the size scaled to BLR'''
+
+for a in a_initial:
+    sim.add(a=a,
+            inc = np.random.uniform(low = -incval, high = incval), # Inclination
+            #inc = 0,
+            Omega = np.random.uniform(high = np.pi),         # Longitude of ascending node
+            #Omega = 0,
+            f=np.random.rand()*2.*np.pi) # Mass is set to 0 by default, random true anomaly
+
+
+# Print parameters for easy copy-pasting
+
+print('Recoil z velocity in cm/s: ' + str(KVZ))
+print('Recoil x velocity in cm/s: ' + str(KVX))
+print('Recoil y velocity in cm/s: ' + str(KVY))
+print('BH Mass: ' + str(BHM))
+print('Number of test Particles: ' + str(N_testparticle))
+print('Random seed: ' + str(RS))
+print('Number of frames to generate: ' + str(Nimg))
+print('Inner Radius: '+ str(Rd/Y))
+print('Outer Radius: '+ str(Rd))
+print('Schwarzschild Radius: '+ str(SwR))
+print('AGN Luminosity: '+ str(LAGN))
+print('Ionizing Photon Luminosity: '+str(Q))
+print('Eddington Ratio: '+str(Eratio))
+print('Dust Sublimation Temperature: '+str(Tsub)) 
+
+#%% # =============================================================================
+# INTEGRATION
+# =================================================================================
+
+for i in range(Nimg):
+    if i == 0:
+        # Print the base simulation before any modification
+        coords = np.zeros((sim.N, 6))
+        sim.serialize_particle_data(xyzvxvyvz=coords)
+        fig, ([ax1, ax2], [ax3, ax4]) = plt.subplots(2, 2, figsize=(12, 10), dpi=200)
+
+        # XY graph
+        ax1 = plt.subplot(2, 2, 3)
+        vz = coords[:, 5]
+        scatterxy = plt.scatter(coords[:, 0], coords[:, 1], c=vz, cmap='coolwarm_r', s=2.5)
+        plt.colorbar(scatterxy, label='Z-Velocity')
+        plt.scatter(coords[:, 0][0], coords[:, 1][0], marker='x', c='k', s=50)
+        ax1.set_title("XY")
+        ax1.set_xlabel('Distance in cm')
+
+        # YZ graph
+        ax2 = plt.subplot(2, 2, 4)
+        vx = coords[:, 3]
+        scatteryz = plt.scatter(coords[:, 2], coords[:, 1], c=vx, cmap='coolwarm', s=2.5)
+        plt.colorbar(scatteryz, label='X-Velocity')
+        plt.scatter(coords[:, 2][0], coords[:, 1][0], marker='*', c='m', s=75)
+        plt.yticks(color='w')
+        ax2.set_title("YZ")
+        ax2.set_xlabel('Distance in cm')
+
+        # XZ graph
+        ax3 = plt.subplot(2, 2, 1)
+        vy = coords[:, 4]
+        scatterxz = plt.scatter(coords[:, 0], coords[:, 2], c=vy, cmap='coolwarm', s=2.5)
+        plt.colorbar(scatterxz, label='Y-Velocity')
+        plt.scatter(coords[:, 0][0], coords[:, 2][0], marker='*', c='m', s=75)
+        plt.xticks(color='w')
+        ax3.set_title("XZ")
+        ax3.set_ylabel('Distance in cm')
+
+        # Empty space
+        ax4 = plt.subplot(2, 2, 2)
+        plt.scatter(0, 0, alpha=0)
+        plt.axis('off')
+        plt.tick_params(left=False, right=False, labelleft=False, labelbottom=False, bottom=False)
+        ax4.set_title(
+            "SMBH Recoil\nInitial Z velocity (cm/s): " + str(KVZ)
+            + "\nInitial X velocity (cm/s): " + str(KVX)
+            + "\nInitial Y velocity (cm/s): " + str(KVY)
+            + '\nTimestep: ' + str(sim.t) + ' seconds',
+            fontsize=13
+        )
+        sim.step()
+
+    else:
+        # Add velocity kick
+        sim.particles[0].vz = -KVZ
+        sim.particles[0].vx = KVX
+        sim.particles[0].vy = KVY
+        sim.step()
+
+        coords = np.zeros((sim.N, 6))
+        sim.serialize_particle_data(xyzvxvyvz=coords)
+        fig, ([ax1, ax2], [ax3, ax4]) = plt.subplots(2, 2, figsize=(12, 10), dpi=200)
+
+        # XY graph
+        ax1 = plt.subplot(2, 2, 3)
+        vz = coords[:, 5]
+        scatterxy = plt.scatter(coords[:, 0], coords[:, 1], c=vz, cmap='coolwarm_r', s=2.5)
+        plt.colorbar(scatterxy, label='Z-Velocity')
+        plt.scatter(coords[:, 0][0], coords[:, 1][0], marker='x', c='black', s=50)
+        ax1.set_title("XY")
+        ax1.set_xlabel('Distance in cm')
+
+        # YZ graph
+        ax2 = plt.subplot(2, 2, 4)
+        vx = coords[:, 3]
+        scatteryz = plt.scatter(coords[:, 2], coords[:, 1], c=vx, cmap='coolwarm', s=2.5)
+        plt.colorbar(scatteryz, label='X-Velocity')
+        plt.scatter(0, 0, marker='+', color='k', s=75)
+        plt.scatter(coords[:, 2][0], coords[:, 1][0], marker='*', c='m', s=75)
+        plt.yticks(color='w')
+        ax2.set_title("YZ")
+        ax2.set_xlabel('Distance in cm')
+
+        # XZ graph
+        ax3 = plt.subplot(2, 2, 1)
+        vy = coords[:, 4]
+        scatterxz = plt.scatter(coords[:, 0], coords[:, 2], c=vy, cmap='coolwarm', s=2.5)
+        plt.colorbar(scatterxz, label='Y-Velocity')
+        plt.scatter(0, 0, marker='+', color='k', s=75)
+        plt.scatter(coords[:, 0][0], coords[:, 2][0], marker='*', c='m', s=75)
+        plt.xticks(color='w')
+        ax3.set_title("XZ")
+        ax3.set_ylabel('Distance in cm')
+
+        # Empty space
+        ax4 = plt.subplot(2, 2, 2)
+        plt.scatter(0, 0, alpha=0)
+        plt.axis('off')
+        plt.tick_params(left=False, right=False, labelleft=False, labelbottom=False, bottom=False)
+        ax4.set_title(
+            "SMBH Recoil\nInitial Z velocity (cm/s): " + str(KVZ)
+            + "\nInitial X velocity (cm/s): " + str(KVX)
+            + "\nInitial Y velocity (cm/s): " + str(KVY)
+            + '\nTimestep: ' + str(f"{sim.t:.3e}") + ' seconds',
+            fontsize=13
+        )
+
+    if i in timesteps:
+        plt.savefig(os.path.join(ANIMATION_DIR, f"image_{i}.jpg"))
+        sim.save_to_file(os.path.join(RAW_DATA_DIR, "archive.bin"))
+    plt.close()
